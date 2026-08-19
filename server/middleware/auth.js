@@ -13,7 +13,7 @@ const authenticateToken = (req, res, next) => {
       return res.status(403).json({ message: 'Token tidak valid atau sudah kadaluarsa.' });
     }
 
-    if (user && user.purpose === 'mfa') {
+    if (user && (user.purpose === 'mfa' || user.purpose === 'mfa-enroll')) {
       return res.status(403).json({ message: 'Selesaikan verifikasi MFA terlebih dahulu.' });
     }
     

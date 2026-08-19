@@ -6,7 +6,7 @@ const db = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { loginLimiter, captchaLimiter } = require('../middleware/rate-limiter');
 const { auditMiddleware } = require('../middleware/audit');
-const { verifyTOTP, isTotpEnabled, sanitizeUser } = require('../lib/totp');
+const { verifyTOTP, isTotpEnabled, sanitizeUser, generateSecret, otpauthURL } = require('../lib/totp');
 const { createCaptcha, consumeCaptcha } = require('../lib/captcha');
 
 const router = express.Router();
@@ -46,6 +46,24 @@ async function issueSession(res, user) {
   );
 
   res.json({ user: sanitizeUser(user), token });
+}
+
+function signMfaToken(user, purpose, expiresIn) {
+  return jwt.sign(
+    { id: user.id, username: user.username, purpose },
+    process.env.JWT_SECRET,
+    { expiresIn }
+  );
+}
+
+function readMfaToken(mfaToken, purpose) {
+  const payload = jwt.verify(mfaToken, process.env.JWT_SECRET);
+  if (!payload || payload.purpose !== purpose || !payload.id) {
+    const err = new Error('Token MFA tidak valid');
+    err.status = 401;
+    throw err;
+  }
+  return payload;
 }
 
 router.get('/captcha', captchaLimiter, (req, res) => {
@@ -107,19 +125,18 @@ router.post('/login', loginLimiter, async (req, res) => {
     }
 
     if (isTotpEnabled(user)) {
-      const mfaToken = jwt.sign(
-        { id: user.id, username: user.username, purpose: 'mfa' },
-        process.env.JWT_SECRET,
-        { expiresIn: '5m' }
-      );
       return res.json({
         requires2FA: true,
-        mfaToken,
+        mfaToken: signMfaToken(user, 'mfa', '5m'),
         message: 'Masukkan kode MFA dari aplikasi authenticator',
       });
     }
 
-    return issueSession(res, user);
+    return res.json({
+      requiresMFASetup: true,
+      mfaToken: signMfaToken(user, 'mfa-enroll', '10m'),
+      message: 'MFA wajib. Aktifkan authenticator untuk melanjutkan.',
+    });
   } catch (error) {
     console.error('Login error:', error.message);
     res.status(500).json({ message: 'Terjadi kesalahan pada server' });
@@ -159,6 +176,68 @@ router.post('/login/2fa', loginLimiter, async (req, res) => {
     return issueSession(res, user);
   } catch (error) {
     console.error('Login 2FA error:', error.message);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+  }
+});
+
+router.post('/login/mfa-setup', loginLimiter, async (req, res) => {
+  try {
+    const payload = readMfaToken(req.body.mfaToken, 'mfa-enroll');
+    const [users] = await db.query('SELECT id, username, npp FROM users WHERE id = ? LIMIT 1', [payload.id]);
+    if (users.length === 0) {
+      return res.status(401).json({ message: 'User tidak ditemukan' });
+    }
+
+    const secret = generateSecret();
+    const username = users[0].username || users[0].npp || payload.username || 'user';
+    await db.query(
+      'UPDATE users SET totp_secret = ?, totp_enabled = FALSE WHERE id = ?',
+      [secret, payload.id]
+    );
+
+    res.json({ secret, otpauthURL: otpauthURL(username, secret) });
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError' || error.status === 401) {
+      return res.status(401).json({ message: 'Sesi MFA berakhir. Silakan login ulang.' });
+    }
+    console.error('MFA setup error:', error.message);
+    res.status(500).json({ message: 'Gagal menyiapkan MFA. Jalankan migrasi 005_mfa_required.sql' });
+  }
+});
+
+router.post('/login/mfa-activate', loginLimiter, async (req, res) => {
+  const otp = req.body.token || req.body.code;
+  try {
+    if (!otp) {
+      return res.status(400).json({ message: 'Kode MFA wajib diisi' });
+    }
+
+    const payload = readMfaToken(req.body.mfaToken, 'mfa-enroll');
+    const [users] = await db.query('SELECT * FROM users WHERE id = ? LIMIT 1', [payload.id]);
+    if (users.length === 0) {
+      return res.status(401).json({ message: 'User tidak ditemukan' });
+    }
+
+    const user = users[0];
+    if (!verifyTOTP(otp, user.totp_secret)) {
+      return res.status(401).json({ message: 'Kode MFA tidak valid' });
+    }
+
+    try {
+      await db.query(
+        'UPDATE users SET totp_enabled = TRUE, mfa_enrolled_at = NOW() WHERE id = ?',
+        [user.id]
+      );
+    } catch (e) {
+      await db.query('UPDATE users SET totp_enabled = TRUE WHERE id = ?', [user.id]);
+    }
+    user.totp_enabled = true;
+    return issueSession(res, user);
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError' || error.status === 401) {
+      return res.status(401).json({ message: 'Sesi MFA berakhir. Silakan login ulang.' });
+    }
+    console.error('MFA activate error:', error.message);
     res.status(500).json({ message: 'Terjadi kesalahan pada server' });
   }
 });

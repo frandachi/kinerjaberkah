@@ -141,28 +141,76 @@
     document.getElementById('kb-mfa-code').focus();
   }
 
-  function maybePromptEnroll(user) {
-    if (!user || user.totp_enabled) return;
-    if (sessionStorage.getItem('kb_mfa_prompt') === 'done') return;
-    sessionStorage.setItem('kb_mfa_prompt', 'shown');
-    setTimeout(() => {
-      if (!localStorage.getItem('token')) return;
+  function askEnroll(secret, message) {
+    return new Promise((resolve, reject) => {
       overlay(`
         <div class="kb-mfa-head">
-          <h2>Amankan akun dengan MFA</h2>
-          <p>Disarankan untuk akun superadmin. Pakai Google Authenticator atau Authy.</p>
+          <h2>Aktifkan MFA</h2>
+          <p>${message || 'MFA wajib untuk semua akun. Tambahkan secret ini di Google Authenticator / Authy, lalu masukkan kode 6 digit.'}</p>
         </div>
         <div class="kb-mfa-body">
-          <button class="kb-mfa-btn primary" id="kb-mfa-ok">Aktifkan sekarang</button>
-          <button class="kb-mfa-btn ghost" id="kb-mfa-cancel" type="button">Nanti</button>
+          <div style="font-size:12px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.06em">Secret</div>
+          <div class="kb-mfa-secret">${secret}</div>
+          <button class="kb-mfa-btn ghost" type="button" id="kb-mfa-copy">Salin secret</button>
+          <input class="kb-mfa-input" id="kb-mfa-code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="000000" />
+          <div class="kb-mfa-err" id="kb-mfa-err"></div>
+          <button class="kb-mfa-btn primary" id="kb-mfa-ok">Aktifkan</button>
+          <button class="kb-mfa-btn ghost" id="kb-mfa-cancel" type="button">Batal</button>
         </div>
       `);
-      document.getElementById('kb-mfa-ok').onclick = () => openSetup();
-      document.getElementById('kb-mfa-cancel').onclick = () => {
-        sessionStorage.setItem('kb_mfa_prompt', 'done');
-        closeOverlay();
+      document.getElementById('kb-mfa-copy').onclick = async () => {
+        try { await navigator.clipboard.writeText(secret); } catch (e) {}
       };
-    }, 1200);
+      const input = document.getElementById('kb-mfa-code');
+      const err = document.getElementById('kb-mfa-err');
+      document.getElementById('kb-mfa-ok').onclick = () => {
+        const v = (input.value || '').replace(/\D/g, '');
+        if (v.length !== 6) {
+          err.textContent = 'Kode harus 6 digit';
+          return;
+        }
+        closeOverlay();
+        resolve(v);
+      };
+      document.getElementById('kb-mfa-cancel').onclick = () => {
+        closeOverlay();
+        reject(new Error('Aktivasi MFA dibatalkan'));
+      };
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') document.getElementById('kb-mfa-ok').click();
+      });
+      input.focus();
+    });
+  }
+
+  async function enrollThenLogin(mfaToken) {
+    const setupRes = await window.__kbNativeFetch(`${API}/auth/login/mfa-setup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mfaToken }),
+    });
+    const setup = await setupRes.json().catch(() => ({}));
+    if (!setupRes.ok || !setup.secret) {
+      throw new Error(setup.message || 'Gagal menyiapkan MFA');
+    }
+
+    let lastError = '';
+    while (true) {
+      const code = await askEnroll(setup.secret, lastError);
+      const activateRes = await window.__kbNativeFetch(`${API}/auth/login/mfa-activate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mfaToken, token: code }),
+      });
+      const activated = await activateRes.clone().json().catch(() => null);
+      if (activateRes.ok && activated && activated.user && activated.token) {
+        return activateRes;
+      }
+      if (activateRes.status !== 401 || (activated && /sesi mfa berakhir|token mfa tidak valid/i.test(activated.message || ''))) {
+        throw new Error((activated && activated.message) || 'Aktivasi MFA gagal');
+      }
+      lastError = (activated && activated.message) || 'Kode MFA tidak valid. Coba lagi.';
+    }
   }
 
   const nativeFetch = window.fetch.bind(window);
@@ -177,29 +225,31 @@
     if (!isLogin) return res;
 
     const data = await res.clone().json().catch(() => null);
-    if (!data || !data.requires2FA || !data.mfaToken) {
-      if (res.ok && data && data.user && data.token) maybePromptEnroll(data.user);
-      return res;
-    }
+    if (!data) return res;
 
     try {
-      let lastError = data.message;
-      while (true) {
-        const code = await askOtp(lastError);
-        const verifyRes = await nativeFetch(`${API}/auth/login/2fa`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mfaToken: data.mfaToken, token: code }),
-        });
-        const verified = await verifyRes.clone().json().catch(() => null);
-        if (verifyRes.ok && verified && verified.user) {
-          maybePromptEnroll(verified.user);
-          return verifyRes;
+      if (data.requiresMFASetup && data.mfaToken) {
+        return await enrollThenLogin(data.mfaToken);
+      }
+
+      if (data.requires2FA && data.mfaToken) {
+        let lastError = data.message;
+        while (true) {
+          const code = await askOtp(lastError);
+          const verifyRes = await nativeFetch(`${API}/auth/login/2fa`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mfaToken: data.mfaToken, token: code }),
+          });
+          const verified = await verifyRes.clone().json().catch(() => null);
+          if (verifyRes.ok && verified && verified.user) {
+            return verifyRes;
+          }
+          if (verifyRes.status !== 401 || (verified && /sesi mfa berakhir|token mfa tidak valid/i.test(verified.message || ''))) {
+            return verifyRes;
+          }
+          lastError = (verified && verified.message) || 'Kode MFA tidak valid';
         }
-        if (verifyRes.status !== 401 || (verified && /sesi mfa berakhir|token mfa tidak valid/i.test(verified.message || ''))) {
-          return verifyRes;
-        }
-        lastError = (verified && verified.message) || 'Kode MFA tidak valid';
       }
     } catch (e) {
       return new Response(JSON.stringify({ message: e.message || 'MFA dibatalkan' }), {
@@ -207,6 +257,8 @@
         headers: { 'Content-Type': 'application/json' },
       });
     }
+
+    return res;
   };
 
   window.KinerjaBerkahMFA = { openSetup, closeOverlay };

@@ -52,10 +52,14 @@ router.post('/verify', authenticateToken, auditMiddleware('2FA_VERIFY'), async (
       return res.status(400).json({ message: 'Kode OTP tidak valid' });
     }
 
-    await db.query(
-      'UPDATE users SET totp_enabled = TRUE WHERE id = ?',
-      [req.user.id]
-    );
+    try {
+      await db.query(
+        'UPDATE users SET totp_enabled = TRUE, mfa_enrolled_at = NOW() WHERE id = ?',
+        [req.user.id]
+      );
+    } catch (e) {
+      await db.query('UPDATE users SET totp_enabled = TRUE WHERE id = ?', [req.user.id]);
+    }
 
     res.json({ message: '2FA berhasil diaktifkan', enabled: true });
   } catch (error) {
@@ -65,28 +69,7 @@ router.post('/verify', authenticateToken, auditMiddleware('2FA_VERIFY'), async (
 });
 
 router.post('/disable', authenticateToken, auditMiddleware('2FA_DISABLE'), async (req, res) => {
-  try {
-    const { token } = req.body;
-    const [users] = await db.query('SELECT totp_secret, totp_enabled FROM users WHERE id = ?', [req.user.id]);
-
-    if (users.length === 0) {
-      return res.status(404).json({ message: 'User tidak ditemukan' });
-    }
-
-    if (isTotpEnabled(users[0]) && !verifyTOTP(token, users[0].totp_secret)) {
-      return res.status(400).json({ message: 'Kode OTP tidak valid' });
-    }
-
-    await db.query(
-      'UPDATE users SET totp_enabled = FALSE, totp_secret = NULL WHERE id = ?',
-      [req.user.id]
-    );
-
-    res.json({ message: '2FA berhasil dinonaktifkan', enabled: false });
-  } catch (error) {
-    console.error('2FA disable error:', error.message);
-    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
-  }
+  return res.status(403).json({ message: 'MFA wajib untuk semua akun dan tidak dapat dinonaktifkan.' });
 });
 
 module.exports = router;

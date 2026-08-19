@@ -12,6 +12,8 @@ const PUBLIC_PATHS = new Set([
   '/api/auth/login',
   '/api/auth/login/2fa',
   '/api/auth/captcha',
+  '/api/auth/login/mfa-setup',
+  '/api/auth/login/mfa-activate',
 ]);
 
 const checkLicense = (req, res, next) => {
