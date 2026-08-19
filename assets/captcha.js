@@ -84,8 +84,8 @@
       box.innerHTML = `
         <div class="kb-captcha-label">Keamanan</div>
         <div class="kb-captcha-row">
-          <img id="kb-captcha-img" class="kb-captcha-img" alt="Captcha" />
           <input id="kb-captcha-input" class="kb-captcha-input" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCDE" />
+          <img id="kb-captcha-img" class="kb-captcha-img" alt="Captcha" />
           <button type="button" class="kb-captcha-refresh" id="kb-captcha-refresh" title="Muat ulang" aria-label="Muat ulang captcha">↻</button>
         </div>
       `;
@@ -102,9 +102,9 @@
 
     const row = box.querySelector('.kb-captcha-row');
     const input = document.getElementById('kb-captcha-input');
+    const img = document.getElementById('kb-captcha-img');
     if (row && input && input.parentElement !== row) {
-      const refresh = document.getElementById('kb-captcha-refresh');
-      row.insertBefore(input, refresh || null);
+      row.insertBefore(input, img || row.firstChild);
     }
   }
 
