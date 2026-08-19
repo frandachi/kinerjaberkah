@@ -10,6 +10,7 @@ const PUBLIC_PATHS = new Set([
   '/api/system/license/activate',
   '/api/system/public-summary',
   '/api/auth/login',
+  '/api/auth/login/2fa',
 ]);
 
 const checkLicense = (req, res, next) => {
