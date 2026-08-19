@@ -11,11 +11,13 @@
       .kb-captcha-box{margin-top:4px}
       .kb-captcha-label{color:#475569;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px}
       .kb-captcha-row{display:flex;gap:8px;align-items:center}
-      .kb-captcha-img{height:40px;width:120px;flex:0 0 120px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;object-fit:contain}
+      .kb-captcha-img{height:40px;width:auto;flex:1 1 auto;max-width:220px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;object-fit:contain}
       .kb-captcha-refresh{border:1px solid #e2e8f0;background:#fff;border-radius:10px;width:40px;height:40px;flex:0 0 40px;cursor:pointer;color:#334155;font-size:16px;line-height:1}
       .kb-captcha-refresh:hover{background:#f8fafc}
-      .kb-captcha-input{flex:1 1 auto;min-width:0;height:40px;box-sizing:border-box;margin:0;padding:8px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;font-size:14px;letter-spacing:.18em;text-transform:uppercase}
+      .kb-login-row{display:flex !important;gap:8px;align-items:center;width:100%}
+      .kb-captcha-input{flex:1 1 0;min-width:0;height:40px;box-sizing:border-box;margin:0;padding:8px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;font-size:14px;letter-spacing:.18em;text-transform:uppercase}
       .kb-captcha-input:focus{outline:none;border-color:#2563eb;background:#fff}
+      .kb-login-row button[type=submit]{flex:1 1 0;width:auto !important}
     `;
     document.head.appendChild(s);
   }
@@ -64,33 +66,53 @@
     return wrap;
   }
 
+  function placeInputBesideSubmit() {
+    const input = document.getElementById('kb-captcha-input');
+    const form = originalForm();
+    const submit = form && form.querySelector('button[type="submit"]');
+    if (!input || !submit) return;
+    const footer = submit.parentElement;
+    if (!footer) return;
+    footer.classList.add('kb-login-row');
+    if (input.nextElementSibling === submit) return;
+    footer.insertBefore(input, submit);
+  }
+
+  function originalForm() {
+    const original = document.getElementById('captcha');
+    return original ? original.closest('form') : document.querySelector('#root form');
+  }
+
   function mountWidget() {
     css();
     const original = document.getElementById('captcha');
     if (!original) return;
     const wrap = solveMathCaptcha();
     if (wrap) wrap.classList.add('kb-captcha-hide');
-    if (document.getElementById('kb-captcha-box')) return;
 
-    const box = document.createElement('div');
-    box.id = 'kb-captcha-box';
-    box.className = 'kb-captcha-box';
-    box.innerHTML = `
-      <div class="kb-captcha-label">Keamanan</div>
-      <div class="kb-captcha-row">
-        <img id="kb-captcha-img" class="kb-captcha-img" alt="Captcha" />
+    if (!document.getElementById('kb-captcha-box')) {
+      const box = document.createElement('div');
+      box.id = 'kb-captcha-box';
+      box.className = 'kb-captcha-box';
+      box.innerHTML = `
+        <div class="kb-captcha-label">Keamanan</div>
+        <div class="kb-captcha-row">
+          <img id="kb-captcha-img" class="kb-captcha-img" alt="Captcha" />
+          <button type="button" class="kb-captcha-refresh" id="kb-captcha-refresh" title="Muat ulang" aria-label="Muat ulang captcha">↻</button>
+        </div>
         <input id="kb-captcha-input" class="kb-captcha-input" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCDE" />
-        <button type="button" class="kb-captcha-refresh" id="kb-captcha-refresh" title="Muat ulang" aria-label="Muat ulang captcha">↻</button>
-      </div>
-    `;
-    if (wrap && wrap.parentElement) wrap.parentElement.insertBefore(box, wrap.nextSibling);
-    else original.parentElement.appendChild(box);
+      `;
+      if (wrap && wrap.parentElement) wrap.parentElement.insertBefore(box, wrap.nextSibling);
+      else original.parentElement.appendChild(box);
 
-    document.getElementById('kb-captcha-refresh').addEventListener('click', (e) => {
-      e.preventDefault();
+      document.getElementById('kb-captcha-refresh').addEventListener('click', (e) => {
+        e.preventDefault();
+        loadCaptcha();
+      });
       loadCaptcha();
-    });
-    loadCaptcha();
+    }
+
+    placeInputBesideSubmit();
   }
 
   const nativeFetch = window.fetch.bind(window);
