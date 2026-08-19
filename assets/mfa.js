@@ -35,10 +35,8 @@
       <ol class="kb-mfa-steps">
         <li>Buka <strong>Google Authenticator</strong> atau <strong>Authy</strong> di ponsel.</li>
         <li>Pilih tambah akun, lalu <strong>scan QR</strong> di bawah.</li>
-        <li>Jika QR tidak terbaca, ketik <strong>secret</strong> secara manual (akun time-based / TOTP).</li>
         <li>Masukkan <strong>kode 6 digit</strong> yang sedang tampil di aplikasi, lalu klik Aktifkan.</li>
       </ol>
-      <p class="kb-mfa-note">Kode berganti setiap 30 detik. Simpan authenticator di HP yang Anda pakai, karena login berikutnya selalu meminta kode ini.</p>
     `;
   }
 
@@ -121,9 +119,6 @@
       </div>
       <div class="kb-mfa-body">
         ${started.qr ? `<img class="kb-mfa-qr" src="${started.qr}" alt="QR MFA" />` : ''}
-        <div style="font-size:12px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.06em">Secret</div>
-        <div class="kb-mfa-secret" id="kb-mfa-secret">${started.secret}</div>
-        <button class="kb-mfa-btn ghost" type="button" id="kb-mfa-copy">Salin secret</button>
         <input class="kb-mfa-input" id="kb-mfa-code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="000000" />
         <div class="kb-mfa-err" id="kb-mfa-err"></div>
         <div class="kb-mfa-actions">
@@ -132,9 +127,6 @@
         </div>
       </div>
     `);
-    document.getElementById('kb-mfa-copy').onclick = async () => {
-      try { await navigator.clipboard.writeText(started.secret); } catch (e) {}
-    };
     document.getElementById('kb-mfa-cancel').onclick = closeOverlay;
     document.getElementById('kb-mfa-ok').onclick = async () => {
       const err = document.getElementById('kb-mfa-err');
@@ -160,7 +152,6 @@
   }
 
   function askEnroll(setup, message) {
-    const secret = setup.secret || '';
     const qr = setup.qr
       ? `<img class="kb-mfa-qr" src="${setup.qr}" alt="QR MFA" />`
       : '';
@@ -172,18 +163,12 @@
         </div>
         <div class="kb-mfa-body">
           ${qr}
-          <div style="font-size:12px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.06em">Secret</div>
-          <div class="kb-mfa-secret">${secret}</div>
-          <button class="kb-mfa-btn ghost" type="button" id="kb-mfa-copy">Salin secret</button>
           <input class="kb-mfa-input" id="kb-mfa-code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="000000" />
           <div class="kb-mfa-err" id="kb-mfa-err"></div>
           <button class="kb-mfa-btn primary" id="kb-mfa-ok">Aktifkan</button>
           <button class="kb-mfa-btn ghost" id="kb-mfa-cancel" type="button">Batal</button>
         </div>
       `);
-      document.getElementById('kb-mfa-copy').onclick = async () => {
-        try { await navigator.clipboard.writeText(secret); } catch (e) {}
-      };
       const input = document.getElementById('kb-mfa-code');
       const err = document.getElementById('kb-mfa-err');
       if (message) err.textContent = message;
@@ -214,7 +199,7 @@
       body: JSON.stringify({ mfaToken }),
     });
     const setup = await setupRes.json().catch(() => ({}));
-    if (!setupRes.ok || !setup.secret) {
+    if (!setupRes.ok || !setup.qr) {
       throw new Error(setup.message || 'Gagal menyiapkan MFA');
     }
 

@@ -34,7 +34,7 @@ router.post('/setup', authenticateToken, auditMiddleware('2FA_SETUP'), async (re
     );
 
     const qr = await qrDataUrl(url);
-    res.json({ secret, otpauthURL: url, qr });
+    res.json({ otpauthURL: url, qr });
   } catch (error) {
     console.error('2FA setup error:', error.message);
     res.status(500).json({ message: 'Gagal menyiapkan MFA. Pastikan kolom totp_secret sudah ada.' });

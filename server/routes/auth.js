@@ -197,7 +197,7 @@ router.post('/login/mfa-setup', loginLimiter, async (req, res) => {
     );
 
     const qr = await qrDataUrl(url);
-    res.json({ secret, otpauthURL: url, qr });
+    res.json({ otpauthURL: url, qr });
   } catch (error) {
     if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError' || error.status === 401) {
       return res.status(401).json({ message: 'Sesi MFA berakhir. Silakan login ulang.' });
