@@ -7,10 +7,13 @@
     s.id = 'kb-mfa-style';
     s.textContent = `
       .kb-mfa-overlay{position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px;font-family:Inter,system-ui,sans-serif}
-      .kb-mfa-card{width:100%;max-width:420px;background:#fff;border-radius:16px;box-shadow:0 25px 50px -12px rgba(0,0,0,.25);overflow:hidden}
+      .kb-mfa-card{width:100%;max-width:440px;max-height:92vh;overflow:auto;background:#fff;border-radius:16px;box-shadow:0 25px 50px -12px rgba(0,0,0,.25)}
       .kb-mfa-head{padding:20px 24px 8px}
       .kb-mfa-head h2{margin:0;font-size:18px;font-weight:700;color:#0f172a}
       .kb-mfa-head p{margin:6px 0 0;font-size:13px;color:#64748b;line-height:1.5}
+      .kb-mfa-steps{margin:10px 0 0;padding-left:18px;font-size:13px;color:#334155;line-height:1.55}
+      .kb-mfa-steps li{margin:0 0 6px}
+      .kb-mfa-note{margin:8px 0 0;font-size:12px;color:#64748b;line-height:1.45}
       .kb-mfa-body{padding:12px 24px 24px}
       .kb-mfa-input{width:100%;box-sizing:border-box;letter-spacing:.4em;text-align:center;font-size:22px;font-weight:700;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc}
       .kb-mfa-input:focus{outline:none;border-color:#2563eb;background:#fff}
@@ -24,6 +27,19 @@
       .kb-mfa-actions{display:flex;gap:8px;margin-top:8px}
     `;
     document.head.appendChild(s);
+  }
+
+  function mfaGuideHtml() {
+    return `
+      <p>Autentikasi dua faktor (MFA) wajib untuk semua akun. Tanpa ini, login tidak dapat dilanjutkan.</p>
+      <ol class="kb-mfa-steps">
+        <li>Buka <strong>Google Authenticator</strong> atau <strong>Authy</strong> di ponsel.</li>
+        <li>Pilih tambah akun, lalu <strong>scan QR</strong> di bawah.</li>
+        <li>Jika QR tidak terbaca, ketik <strong>secret</strong> secara manual (akun time-based / TOTP).</li>
+        <li>Masukkan <strong>kode 6 digit</strong> yang sedang tampil di aplikasi, lalu klik Aktifkan.</li>
+      </ol>
+      <p class="kb-mfa-note">Kode berganti setiap 30 detik. Simpan authenticator di HP yang Anda pakai, karena login berikutnya selalu meminta kode ini.</p>
+    `;
   }
 
   function overlay(html) {
@@ -101,7 +117,7 @@
     overlay(`
       <div class="kb-mfa-head">
         <h2>Aktifkan MFA</h2>
-        <p>Tambahkan akun di Google Authenticator / Authy, lalu masukkan kode 6 digit.</p>
+        ${mfaGuideHtml()}
       </div>
       <div class="kb-mfa-body">
         ${started.qr ? `<img class="kb-mfa-qr" src="${started.qr}" alt="QR MFA" />` : ''}
@@ -152,7 +168,7 @@
       overlay(`
         <div class="kb-mfa-head">
           <h2>Aktifkan MFA</h2>
-          <p>${message || 'MFA wajib untuk semua akun. Scan QR di Google Authenticator / Authy, atau ketik secret manual, lalu masukkan kode 6 digit.'}</p>
+          ${mfaGuideHtml()}
         </div>
         <div class="kb-mfa-body">
           ${qr}
@@ -170,6 +186,7 @@
       };
       const input = document.getElementById('kb-mfa-code');
       const err = document.getElementById('kb-mfa-err');
+      if (message) err.textContent = message;
       document.getElementById('kb-mfa-ok').onclick = () => {
         const v = (input.value || '').replace(/\D/g, '');
         if (v.length !== 6) {
