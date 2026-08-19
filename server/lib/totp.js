@@ -101,10 +101,21 @@ function sanitizeUser(user) {
   return copy;
 }
 
+async function qrDataUrl(text) {
+  const QRCode = require('qrcode');
+  return QRCode.toDataURL(text, {
+    margin: 1,
+    width: 220,
+    errorCorrectionLevel: 'M',
+    color: { dark: '#0f172a', light: '#ffffff' },
+  });
+}
+
 module.exports = {
   generateSecret,
   otpauthURL,
   verifyTOTP,
   isTotpEnabled,
   sanitizeUser,
+  qrDataUrl,
 };

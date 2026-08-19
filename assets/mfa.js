@@ -20,6 +20,7 @@
       .kb-mfa-btn.primary:disabled{opacity:.6;cursor:not-allowed}
       .kb-mfa-btn.ghost{background:transparent;color:#64748b;margin-top:8px}
       .kb-mfa-secret{font-family:ui-monospace,Consolas,monospace;background:#f1f5f9;padding:10px 12px;border-radius:8px;font-size:13px;word-break:break-all;margin:8px 0 12px}
+      .kb-mfa-qr{display:block;margin:4px auto 12px;width:180px;height:180px;border:1px solid #e2e8f0;border-radius:12px;padding:8px;background:#fff;box-sizing:border-box}
       .kb-mfa-actions{display:flex;gap:8px;margin-top:8px}
     `;
     document.head.appendChild(s);
@@ -103,6 +104,7 @@
         <p>Tambahkan akun di Google Authenticator / Authy, lalu masukkan kode 6 digit.</p>
       </div>
       <div class="kb-mfa-body">
+        ${started.qr ? `<img class="kb-mfa-qr" src="${started.qr}" alt="QR MFA" />` : ''}
         <div style="font-size:12px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.06em">Secret</div>
         <div class="kb-mfa-secret" id="kb-mfa-secret">${started.secret}</div>
         <button class="kb-mfa-btn ghost" type="button" id="kb-mfa-copy">Salin secret</button>
@@ -141,14 +143,19 @@
     document.getElementById('kb-mfa-code').focus();
   }
 
-  function askEnroll(secret, message) {
+  function askEnroll(setup, message) {
+    const secret = setup.secret || '';
+    const qr = setup.qr
+      ? `<img class="kb-mfa-qr" src="${setup.qr}" alt="QR MFA" />`
+      : '';
     return new Promise((resolve, reject) => {
       overlay(`
         <div class="kb-mfa-head">
           <h2>Aktifkan MFA</h2>
-          <p>${message || 'MFA wajib untuk semua akun. Tambahkan secret ini di Google Authenticator / Authy, lalu masukkan kode 6 digit.'}</p>
+          <p>${message || 'MFA wajib untuk semua akun. Scan QR di Google Authenticator / Authy, atau ketik secret manual, lalu masukkan kode 6 digit.'}</p>
         </div>
         <div class="kb-mfa-body">
+          ${qr}
           <div style="font-size:12px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.06em">Secret</div>
           <div class="kb-mfa-secret">${secret}</div>
           <button class="kb-mfa-btn ghost" type="button" id="kb-mfa-copy">Salin secret</button>
@@ -196,7 +203,7 @@
 
     let lastError = '';
     while (true) {
-      const code = await askEnroll(setup.secret, lastError);
+      const code = await askEnroll(setup, lastError);
       const activateRes = await window.__kbNativeFetch(`${API}/auth/login/mfa-activate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

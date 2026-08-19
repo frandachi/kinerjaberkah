@@ -6,7 +6,7 @@ const db = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { loginLimiter, captchaLimiter } = require('../middleware/rate-limiter');
 const { auditMiddleware } = require('../middleware/audit');
-const { verifyTOTP, isTotpEnabled, sanitizeUser, generateSecret, otpauthURL } = require('../lib/totp');
+const { verifyTOTP, isTotpEnabled, sanitizeUser, generateSecret, otpauthURL, qrDataUrl } = require('../lib/totp');
 const { createCaptcha, consumeCaptcha } = require('../lib/captcha');
 
 const router = express.Router();
@@ -190,12 +190,14 @@ router.post('/login/mfa-setup', loginLimiter, async (req, res) => {
 
     const secret = generateSecret();
     const username = users[0].username || users[0].npp || payload.username || 'user';
+    const url = otpauthURL(username, secret);
     await db.query(
       'UPDATE users SET totp_secret = ?, totp_enabled = FALSE WHERE id = ?',
       [secret, payload.id]
     );
 
-    res.json({ secret, otpauthURL: otpauthURL(username, secret) });
+    const qr = await qrDataUrl(url);
+    res.json({ secret, otpauthURL: url, qr });
   } catch (error) {
     if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError' || error.status === 401) {
       return res.status(401).json({ message: 'Sesi MFA berakhir. Silakan login ulang.' });

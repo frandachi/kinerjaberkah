@@ -2,7 +2,7 @@ const express = require('express');
 const db = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { auditMiddleware } = require('../middleware/audit');
-const { generateSecret, otpauthURL, verifyTOTP, isTotpEnabled } = require('../lib/totp');
+const { generateSecret, otpauthURL, verifyTOTP, isTotpEnabled, qrDataUrl } = require('../lib/totp');
 
 const router = express.Router();
 
@@ -26,13 +26,15 @@ router.post('/setup', authenticateToken, auditMiddleware('2FA_SETUP'), async (re
   try {
     const secret = generateSecret();
     const username = req.user.username || req.user.npp || 'user';
+    const url = otpauthURL(username, secret);
 
     await db.query(
       'UPDATE users SET totp_secret = ?, totp_enabled = FALSE WHERE id = ?',
       [secret, req.user.id]
     );
 
-    res.json({ secret, otpauthURL: otpauthURL(username, secret) });
+    const qr = await qrDataUrl(url);
+    res.json({ secret, otpauthURL: url, qr });
   } catch (error) {
     console.error('2FA setup error:', error.message);
     res.status(500).json({ message: 'Gagal menyiapkan MFA. Pastikan kolom totp_secret sudah ada.' });
