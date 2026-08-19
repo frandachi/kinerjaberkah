@@ -1,4 +1,7 @@
 const httpsRedirect = (req, res, next) => {
+  if (req.path === '/api/health' || req.url.startsWith('/api/health')) {
+    return next();
+  }
   if (process.env.NODE_ENV === 'production' && !req.secure) {
     const host = req.headers.host || '';
     if (!host.includes('localhost') && !host.includes('127.0.0.1')) {

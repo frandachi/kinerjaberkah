@@ -59,11 +59,15 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }));
 
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').flatMap(o => {
+const originSource = [process.env.ALLOWED_ORIGINS, process.env.CORS_ORIGIN]
+  .filter(Boolean)
+  .join(',');
+
+const allowedOrigins = originSource
+  ? originSource.split(',').flatMap(o => {
       const trimmed = o.trim();
+      if (!trimmed) return [];
       const variants = [trimmed];
-      // Auto-add www / non-www variants and http/https counterparts
       try {
         const url = new URL(trimmed);
         const host = url.hostname.replace(/^www\./, '');
@@ -118,6 +122,7 @@ app.get('/api/health', async (req, res) => {
   } catch (e) {
     status.db = 'disconnected';
   }
+  res.setHeader('X-App', 'kinerjaberkah');
   res.json(status);
 });
 
@@ -146,11 +151,18 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: 'Terjadi kesalahan pada server' });
 });
 
-const PORT = process.env.PORT || 5555;
+const PORT = process.env.PORT || 3001;
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-});
+if (require.main === module) {
+  const server = app.listen(PORT, '127.0.0.1', () => {
+    console.log(`Server running on 127.0.0.1:${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
+
+  server.on('error', (err) => {
+    console.error('Listen error:', err.message);
+    process.exit(1);
+  });
+}
 
 module.exports = app;

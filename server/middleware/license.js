@@ -4,8 +4,17 @@ const path = require('path');
 const EXPIRATION_DATE = new Date('2027-01-31T23:59:59');
 const LICENSE_FILE = path.join(__dirname, '../license.json');
 
+const PUBLIC_PATHS = new Set([
+  '/api/health',
+  '/api/system/license',
+  '/api/system/license/activate',
+  '/api/system/public-summary',
+  '/api/auth/login',
+]);
+
 const checkLicense = (req, res, next) => {
-  if (req.path === '/api/system/license' || req.path === '/api/system/license/activate') {
+  const p = (req.path || '').split('?')[0];
+  if (PUBLIC_PATHS.has(p)) {
     return next();
   }
   
