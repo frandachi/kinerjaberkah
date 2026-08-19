@@ -1,0 +1,47 @@
+const express = require('express');
+const db = require('../db');
+const authenticateToken = require('../middleware/auth');
+const authorizeRole = require('../middleware/authorize');
+
+const router = express.Router();
+
+router.get('/', authenticateToken, async (req, res) => {
+  try {
+    const { page = 1, limit = 100, search = '' } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    let queryStr = 'SELECT * FROM pegawai';
+    let countStr = 'SELECT COUNT(*) as total FROM pegawai';
+    const queryParams = [];
+    const countParams = [];
+
+    if (search) {
+      queryStr += ' WHERE name LIKE ? OR npp LIKE ? OR jabatan LIKE ?';
+      countStr += ' WHERE name LIKE ? OR npp LIKE ? OR jabatan LIKE ?';
+      const searchParam = `%${search}%`;
+      queryParams.push(searchParam, searchParam, searchParam);
+      countParams.push(searchParam, searchParam, searchParam);
+    }
+
+    queryStr += ' ORDER BY name ASC LIMIT ? OFFSET ?';
+    queryParams.push(parseInt(limit), offset);
+
+    const [pegawai] = await db.query(queryStr, queryParams);
+    const [countResult] = await db.query(countStr, countParams);
+
+    res.json({
+      data: pegawai,
+      pagination: {
+        total: countResult[0].total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(countResult[0].total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Get pegawai error:', error.message);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+  }
+});
+
+module.exports = router;

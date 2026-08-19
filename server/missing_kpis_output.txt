@@ -1,0 +1,32 @@
+Total Kombinasi Jabatan & Unit (Non-Divisi) yang BELUM memiliki KPI: 40
+
+=== Jabatan: Professional Manager (1 unit) ===
+Unit: Cabang Melawai
+
+=== Jabatan: Account Officer (12 unit) ===
+Contoh Unit: Cabang Pembantu Aksara, Cabang Pembantu Halat, Cabang Pembantu Krakatau, Cabang Pembantu Menteng, Cabang Pembantu Natal, Cabang Pembantu Pakkat, Cabang Pembantu Pasar Panyabungan, Cabang Pembantu Pulau Rakyat, Cabang Pembantu Pulau Tello, Cabang Pembantu Sosa ... dan 2 lainnya
+
+=== Jabatan: Teller (6 unit) ===
+Unit: Cabang Pembantu Batang Kuis, Cabang Pembantu Marendal, Cabang Pembantu Percut, Cabang Pembantu Sadabuan, Cabang Pembantu Tanjung Tiram, Cabang Pembantu Tiga Binanga
+
+=== Jabatan: Funding Sales Officer (6 unit) ===
+Unit: Cabang Pembantu Cemara, Cabang Pembantu Kampung Durian, Cabang Pembantu Menteng, Cabang Pembantu P. Brandan, Cabang Pembantu Pasar Dwikora Parluasan, Cabang Pembantu Tj.Morawa
+
+=== Jabatan: Pemimpin Kas Mobil (6 unit) ===
+Unit: Cabang Pembantu Deli Tua, Cabang Pembantu Kampung Pajak, Cabang Pembantu Laguboti, Cabang Pembantu Pancur Batu, Cabang Pembantu Sidamanik, Cabang Pembantu Sosa
+
+=== Jabatan: Pelaksana (1 unit) ===
+Unit: Cabang Pembantu Indrapura
+
+=== Jabatan: Teller Cabang Pembantu Kelas 4 (2 unit) ===
+Unit: Cabang Pembantu Kantor Bupati Madina, Cabang Pembantu Tandem
+
+=== Jabatan: Pemimpin Seksi Bisnis Cabang Pembantu Kelas 2 (3 unit) ===
+Unit: Cabang Pembantu Kuala, Cabang Pembantu P. Brandan, Cabang Pembantu Perdagangan
+
+=== Jabatan: Wakil Pemimpin Cabang Pembantu Kelas 3 (Mikro) (2 unit) ===
+Unit: Cabang Pembantu Pasar Panyabungan, Cabang Pembantu Pasar Sidikalang
+
+=== Jabatan: Pj. Pemimpin Seksi Bisnis Cabang Pembantu Kelas 2 (1 unit) ===
+Unit: Cabang Pembantu Syariah Stabat
+

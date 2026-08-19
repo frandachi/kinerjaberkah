@@ -1,0 +1,321 @@
+[
+  {
+    "jabatan": "Pemimpin Cabang Koordinator",
+    "kpis": [
+      {"name": "Laba Bersih (Konsolidasi)", "unit": "currency", "weight": 20, "target": "RKAT"},
+      {"name": "Cost Of Credit", "unit": "percentage", "weight": 5, "target": "RKAT"},
+      {"name": "Cost Of Fund", "unit": "percentage", "weight": 5, "target": "RKAT"},
+      {"name": "Pertumbuhan O/S Kredit (Konsolidasi)", "unit": "percentage", "weight": 15, "target": "> 10 % YOY"},
+      {"name": "Pertumbuhan O/S DPK (Konsolidasi)", "unit": "percentage", "weight": 15, "target": "> 10 % YOY"},
+      {"name": "Pembiayaan Syariah/DBLM", "unit": "currency", "weight": 5, "target": "UUS"},
+      {"name": "DPK Syariah/DBLM", "unit": "currency", "weight": 5, "target": "UUS"},
+      {"name": "NPL Gross (Konsolidasi)", "unit": "percentage", "weight": 10, "target": "RKAT"},
+      {"name": "O/S Kredit Col.1 yang direalisasikan selama <1 Tahun", "unit": "percentage", "weight": 5, "target": "100 % Dari Kredit yang direalisasi dalam 1 Tahun"},
+      {"name": "Penyelesaiaan Temuan audit external dan internal Sesuai Komitmen", "unit": "percentage", "weight": 5, "target": "100%"},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 85 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Wakil Pemimpin Bisnis Cabang",
+    "kpis": [
+      {"name": "Pendapatan Bunga Kredit Produk Div. Konsumer", "unit": "currency", "weight": 20, "target": "RKAT"},
+      {"name": "Pembiayaan Syariah/DBLM", "unit": "currency", "weight": 5, "target": "UUS"},
+      {"name": "O/S Kredit Produk Div. Konsumer", "unit": "currency", "weight": 20, "target": "RKAT"},
+      {"name": "Pertumbuhan O/S Dana Pihak Ketiga", "unit": "percentage", "weight": 15, "target": "> 10 % YOY"},
+      {"name": "DPK Syariah/DBLM", "unit": "currency", "weight": 5, "target": "UUS"},
+      {"name": "NPL Gross Kredit Produk Div. Konsumer", "unit": "percentage", "weight": 10, "target": "RKAT"},
+      {"name": "O/S Kredit Col.1 yang direalisasikan selama <1 Tahun", "unit": "percentage", "weight": 10, "target": "100 % Dari Kredit yang direalisasi dalam 1 Tahun"},
+      {"name": "Penyelesaiaan Temuan audit external dan internal Sesuai Komitmen", "unit": "percentage", "weight": 5, "target": "100%"},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 85 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Pemimpin Seksi Kredit Produktif Dan Dana",
+    "kpis": [
+      {"name": "Pendapatan Bunga Kredit Produktif", "unit": "currency", "weight": 15, "target": "RKAT"},
+      {"name": "Cost of Fund", "unit": "percentage", "weight": 10, "target": "RKAT"},
+      {"name": "Dana Pihak Ketiga", "unit": "percentage", "weight": 10, "target": "RKAT"},
+      {"name": "O/S Kredit Produk Div. Kredit", "unit": "currency", "weight": 10, "target": "RKAT"},
+      {"name": "Rasio LDR", "unit": "percentage", "weight": 10, "target": "RKAT"},
+      {"name": "O/S Kredit Col.1 yang direalisasikan selama <1 Tahun", "unit": "currency", "weight": 15, "target": "100 % Dari Kredit yang direalisasi dalam 1 Tahun"},
+      {"name": "Rasio NPL Kredit Produktif", "unit": "percentage", "weight": 15, "target": "NPL < 2%"},
+      {"name": "Penyelesaiaan Temuan audit external dan internal Sesuai Komitmen", "unit": "percentage", "weight": 5, "target": "Indeks"},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 85 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "SRM/RM/ARM",
+    "kpis": [
+      {"name": "O/S Kredit Dilluar KMK-TR", "unit": "currency", "weight": 15, "target": "RKAT/Div. Kredit"},
+      {"name": "O/S Kredit KMK-TR", "unit": "currency", "weight": 10, "target": "RKAT/Div. Kredit"},
+      {"name": "O/S NPL Kredit Kelolaan", "unit": "currency", "weight": 5, "target": "RKAT/Div. Kredit"},
+      {"name": "Pertumbuhan O/S Kredit Kelolaan", "unit": "percentage", "weight": 20, "target": "RKAT/Div. Kredit"},
+      {"name": "Jumlah Nasabah Baru", "unit": "number", "weight": 10, "target": "5 Nasabah baru / bulan"},
+      {"name": "Leadtime Pembaharuan Kredit", "unit": "number", "weight": 10, "target": "1 Minggu < jto"},
+      {"name": "O/S Kredit Col.1 yang direalisasikan selama <1 Tahun", "unit": "percentage", "weight": 15, "target": "100 % Dari Kredit yang direalisasi dalam 1 Tahun"},
+      {"name": "Penyelesaiaan Temuan audit external dan internal Sesuai Komitmen", "unit": "percentage", "weight": 5, "target": "100.00%"},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 85 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Account Officer",
+    "kpis": [
+      {"name": "Realisasi Kredit", "unit": "currency", "weight": 20, "target": "RKAT/Div. Ritel"},
+      {"name": "Pertumbuhan NOA Kredit", "unit": "percentage", "weight": 20, "target": "> 10%/Tahun"},
+      {"name": "Pembiayaan Syariah/DBLM", "unit": "currency", "weight": 10, "target": "UUS"},
+      {"name": "O/S Kredit Col.1 yang direalisasikan selama <1 Tahun", "unit": "percentage", "weight": 20, "target": "100 % Dari Kredit yang direalisasi dalam 1 Tahun"},
+      {"name": "Net Kolektibilitas Improvement Rasio", "unit": "percentage", "weight": 10, "target": "≥ +1,5% per tahun / ≥ +0,15% per bulan"},
+      {"name": "Rasio NPL", "unit": "percentage", "weight": 10, "target": "RKAT/Div. Ritel"},
+      {"name": "Culture Implementation Index", "unit": "percentage", "weight": 5, "target": "≥ 85 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "percentage", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Funding Sales Officer",
+    "kpis": [
+      {"name": "O/S Dana Pihak Ketiga", "unit": "currency", "weight": 20, "target": "DDJ"},
+      {"name": "NOA DPK Ritel", "unit": "number", "weight": 20, "target": "DDJ"},
+      {"name": "Akuisisi NOA Baru Tabungan", "unit": "number", "weight": 15, "target": "DDJ"},
+      {"name": "Akuisisi e-Channel", "unit": "number", "weight": 10, "target": "DDJ"},
+      {"name": "DPK Syariah/DBLM", "unit": "currency", "weight": 10, "target": "UUS"},
+      {"name": "Referral KUR/KMG/Pensiun/KAD", "unit": "number", "weight": 5, "target": "Unit Kerja"},
+      {"name": "Realisasi Pipeline", "unit": "percentage", "weight": 10, "target": "≥ 60% konversi prospek."},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Pemimpin Seksi Konsumer",
+    "kpis": [
+      {"name": "Pendapatan Bunga Kredit Ritel", "unit": "currency", "weight": 20, "target": "RKAT"},
+      {"name": "Pertumbuhan NOA Kredit", "unit": "percentage", "weight": 15, "target": "> 10 % YOY"},
+      {"name": "O/S Kredit Ritel", "unit": "currency", "weight": 15, "target": "RKAT"},
+      {"name": "Pembiayaan Syariah", "unit": "currency", "weight": 5, "target": "UUS"},
+      {"name": "O/S Kredit Col.1 yang direalisasikan selama <1 Tahun", "unit": "percentage", "weight": 15, "target": "100 % Dari Kredit yang direalisasi dalam 1 Tahun"},
+      {"name": "NPL Gross", "unit": "percentage", "weight": 15, "target": "RKAT"},
+      {"name": "Penyelesaiaan Temuan audit external dan internal", "unit": "percentage", "weight": 5, "target": "100%"},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 85 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Account Officer Konsumer",
+    "kpis": [
+      {"name": "Realisasi Kredit Konsumtif", "unit": "currency", "weight": 20, "target": "RKAT/Div. Ritel"},
+      {"name": "Pertumbuhan NOA Kredit", "unit": "percentage", "weight": 15, "target": "> 10 %/Tahun"},
+      {"name": "Pembiayaan Syariah/DBLM", "unit": "currency", "weight": 5, "target": "UUS"},
+      {"name": "O/S Kredit Col.1 yang direalisasikan selama <1 Tahun", "unit": "percentage", "weight": 20, "target": "100 % Dari Kredit yang direalisasi dalam 1 Tahun"},
+      {"name": "Rasio NPL", "unit": "percentage", "weight": 15, "target": "RKAT"},
+      {"name": "Realisasi Pipeline", "unit": "percentage", "weight": 5, "target": "≥ 60% konversi prospek."},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 10, "target": "≥ 80 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 10, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Wakil Pemimpin Operasional Cabang",
+    "kpis": [
+      {"name": "Pendapatan Feebase Income", "unit": "currency", "weight": 20, "target": "RKAT"},
+      {"name": "CIR", "unit": "percentage", "weight": 15, "target": "RKAT"},
+      {"name": "O/S Dana Pihak Ketiga", "unit": "currency", "weight": 15, "target": "RKAT"},
+      {"name": "Indeks Kepuasan Pelanggan", "unit": "score", "weight": 15, "target": "Indeks 4"},
+      {"name": "Dana Pihak Ketiga/DBLM", "unit": "number", "weight": 5, "target": "UUS"},
+      {"name": "Klaim Asuransi", "unit": "percentage", "weight": 10, "target": "100%"},
+      {"name": "Penyelesaiaan Temuan audit external dan internal Sesuai Komitmen", "unit": "percentage", "weight": 10, "target": "100%"},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 85 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Pemimpin Seksi Operasional",
+    "kpis": [
+      {"name": "Efisiensi Biaya Operasional Cabang", "unit": "currency", "weight": 20, "target": "RKAT"},
+      {"name": "O/S Dana Pihak Ketiga", "unit": "currency", "weight": 15, "target": "RKAT"},
+      {"name": "Indeks Kepuasan Pelanggan", "unit": "score", "weight": 15, "target": "Indeks 4"},
+      {"name": "Klaim Asuransi", "unit": "percentage", "weight": 15, "target": "100%"},
+      {"name": "Tata Kelola Agunan Dan Arsip", "unit": "percentage", "weight": 15, "target": "100%"},
+      {"name": "Penyelesaiaan Temuan audit external dan internal Sesuai Komitmen", "unit": "percentage", "weight": 10, "target": "100%"},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 85 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Back Office",
+    "kpis": [
+      {"name": "Pendapatan Feebase Income", "unit": "currency", "weight": 15, "target": "RKAT"},
+      {"name": "CIR", "unit": "percentage", "weight": 15, "target": "RKAT"},
+      {"name": "Dana Pihak Ketiga", "unit": "currency", "weight": 15, "target": "Rp. 2.000.000.000/Tahun"},
+      {"name": "Indeks Kepuasan Pelanggan", "unit": "score", "weight": 10, "target": "Indeks 4"},
+      {"name": "DPK Syariah/DBLM", "unit": "currency", "weight": 5, "target": "UUS"},
+      {"name": "Tata Kelola Agunan Dan Arsip", "unit": "percentage", "weight": 10, "target": "100%"},
+      {"name": "Klaim Asuransi", "unit": "percentage", "weight": 10, "target": "100%"},
+      {"name": "Penyelesaiaan Temuan audit external dan internal Sesuai Komitmen", "unit": "percentage", "weight": 10, "target": "≥ 90% tanpa temuan mayor"},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Pemimpin Seksi Pelayanan Nasabah",
+    "kpis": [
+      {"name": "Pendapatan Feebase Income", "unit": "currency", "weight": 20, "target": "RKAT"},
+      {"name": "O/S Dana Pihak Ketiga", "unit": "currency", "weight": 10, "target": "RKAT"},
+      {"name": "Indeks Kepuasan Pelanggan", "unit": "score", "weight": 20, "target": "Indeks 4"},
+      {"name": "Penyelesaian Komplain Tepat Waktu", "unit": "percentage", "weight": 15, "target": "100%"},
+      {"name": "Jumlah Rekening Tutup (Selain Tutup Otomatis)", "unit": "percentage", "weight": 10, "target": "< % YOY Total Nasabah Nasabah Tutup"},
+      {"name": "Kepatuhan SOP & Regulasi", "unit": "percentage", "weight": 10, "target": "100%"},
+      {"name": "Penyelesaiaan Temuan audit external dan internal Sesuai Komitmen", "unit": "percentage", "weight": 5, "target": "100%"},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 85 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Head Teller",
+    "kpis": [
+      {"name": "Pendapatan Feebase Income", "unit": "currency", "weight": 25, "target": "RKAT"},
+      {"name": "Dana Pihak Ketiga", "unit": "currency", "weight": 15, "target": "5 Milyar/Tahun"},
+      {"name": "Indeks Standard Layanan Frontliner", "unit": "score", "weight": 25, "target": "Indeks 4 (Baik)"},
+      {"name": "Akurasi Transaksi Teller (Kesalahan Input dll)", "unit": "number", "weight": 15, "target": "≤ 1 kesalahan per bulan"},
+      {"name": "Penyelesaiaan Temuan audit external dan internal Sesuai Komitmen", "unit": "percentage", "weight": 10, "target": "≥ 90% tanpa temuan mayor"},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Teller",
+    "kpis": [
+      {"name": "Pendapatan Feebase Income Transaksi", "unit": "currency", "weight": 25, "target": "RKAT"},
+      {"name": "Dana Pihak Ketiga", "unit": "currency", "weight": 25, "target": "2 Milyar/Tahun"},
+      {"name": "Indeks Standard Layanan Frontliner", "unit": "score", "weight": 20, "target": "Indeks 4"},
+      {"name": "Akurasi Transaksi Teller (Kesalahan Input dll)", "unit": "number", "weight": 20, "target": "≤ 1% dari transaksi"},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Head Customer Service",
+    "kpis": [
+      {"name": "Pendapatan Feebase Income", "unit": "currency", "weight": 15, "target": "RKAT"},
+      {"name": "Indeks Standard Layanan Frontliner", "unit": "score", "weight": 15, "target": "Indeks 4"},
+      {"name": "Dana Pihak Ketiga", "unit": "currency", "weight": 15, "target": "5 Milyar/Tahun"},
+      {"name": "Aktivasi Mobile Banking", "unit": "number", "weight": 15, "target": "70 % dari total nasabah Tabungan Aktivasi Mobile Banking"},
+      {"name": "Pembukaan Rekening Baru", "unit": "number", "weight": 10, "target": "≥ 1000 akun/tahun"},
+      {"name": "Update Pengelolaan CIF", "unit": "percentage", "weight": 10, "target": "≥ 98% data CIF akurat"},
+      {"name": "Penyelesaiaan Temuan audit external dan internal Sesuai Komitmen", "unit": "percentage", "weight": 10, "target": "≥ 90% tanpa temuan mayor"},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Customer Service",
+    "kpis": [
+      {"name": "Pendapatan Feebase Income Transaksi", "unit": "currency", "weight": 15, "target": "RKAT"},
+      {"name": "O/S Outstanding DPK Nasabah Prioritas", "unit": "currency", "weight": 15, "target": "RKAT"},
+      {"name": "Indeks Standard Layanan Teller", "unit": "score", "weight": 15, "target": "Indeks 4"},
+      {"name": "Indeks Kepuasan Pelanggan", "unit": "score", "weight": 15, "target": "≥ 85"},
+      {"name": "Akusisi Nasabah Prioritas Baru", "unit": "number", "weight": 15, "target": "50 Nasabah Baru/Tahun"},
+      {"name": "Kesalahan terhadap total transaksi", "unit": "percentage", "weight": 15, "target": "≤ 1%"},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Pemimpin Seksi Pelayanan Lembaga",
+    "kpis": [
+      {"name": "O/S DPK Korporasi/Pemda", "unit": "currency", "weight": 20, "target": "RKAT"},
+      {"name": "Akuisisi Nasabah Dana Korporasi (Non Pemda)", "unit": "number", "weight": 15, "target": "Unit Kerja/DDJ"},
+      {"name": "Realisasi Dana Rekanan Pemprov/Pemda", "unit": "percentage", "weight": 15, "target": "Unit Kerja/DDJ"},
+      {"name": "DPK Syariah/DBLM", "unit": "currency", "weight": 5, "target": "UUS"},
+      {"name": "Indeks Kepuasan Pelanggan", "unit": "score", "weight": 15, "target": "Indeks 4"},
+      {"name": "Monitoring Kegiatan Strategis Daerah (KSD)", "unit": "percentage", "weight": 10, "target": "100%"},
+      {"name": "Penyelesaiaan Temuan audit external dan internal Sesuai Komitmen", "unit": "percentage", "weight": 10, "target": "100%"},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Pemimpin Seksi Pelayanan Keuangan",
+    "kpis": [
+      {"name": "Pendapatan Feebase Income", "unit": "currency", "weight": 15, "target": "RKAT"},
+      {"name": "CIR", "unit": "percentage", "weight": 15, "target": "RKAT"},
+      {"name": "Dana Pihak Ketiga", "unit": "currency", "weight": 15, "target": "5 Milyar/Tahun"},
+      {"name": "Indeks Kepuasan Pelanggan", "unit": "score", "weight": 10, "target": "Indeks 4"},
+      {"name": "DPK Syariah/DBLM", "unit": "currency", "weight": 5, "target": "UUS"},
+      {"name": "Jumlah Transaksi", "unit": "number", "weight": 10, "target": "Unit Kerja"},
+      {"name": "Tingkat Kesalahan Input/Pelayanan", "unit": "percentage", "weight": 10, "target": "< 1% / Tahun"},
+      {"name": "Penyelesaiaan Temuan audit external dan internal Sesuai Komitmen", "unit": "percentage", "weight": 10, "target": "≥ 90% tanpa temuan mayor"},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Pemimpin Unit Layanan Prioritas",
+    "kpis": [
+      {"name": "Pendapatan Feebase Income", "unit": "currency", "weight": 10, "target": "RKAT"},
+      {"name": "Indeks Kepuasan Pelanggan", "unit": "score", "weight": 10, "target": "≥ 90"},
+      {"name": "O/S Outstanding DPK Nasabah Prioritas", "unit": "currency", "weight": 15, "target": "RKAT/DDJ"},
+      {"name": "CASA Ratio Prioritas", "unit": "percentage", "weight": 10, "target": "≥60%"},
+      {"name": "Indeks Standard Layanan Frontliner", "unit": "score", "weight": 10, "target": "Indeks 4 (Baik)"},
+      {"name": "Akusisi Nasabah Prioritas Baru", "unit": "number", "weight": 15, "target": "50 Nasabah Baru/Tahun"},
+      {"name": "Jumlah Keluhan Nasabah Prioritas yang Diselesaikan", "unit": "percentage", "weight": 10, "target": "100%"},
+      {"name": "Penyelesaiaan Temuan audit external dan internal Sesuai Komitmen", "unit": "percentage", "weight": 10, "target": "≥ 90% tanpa temuan mayor"},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Pemimpin Payment Point",
+    "kpis": [
+      {"name": "Efisiensi Biaya Operasional", "unit": "percentage", "weight": 10, "target": "Realisasi biaya ≤ 95% dari anggaran (hemat minimal 5%)"},
+      {"name": "Dana Pihak Ketiga", "unit": "currency", "weight": 20, "target": "RKAT"},
+      {"name": "Pertumbuhan NOA DPK", "unit": "percentage", "weight": 10, "target": "> 10 %/Tahun"},
+      {"name": "Indeks Standard Layanan Frontliner", "unit": "score", "weight": 10, "target": "Indeks minimal 4.00 (Baik) – berdasarkan hasil mistery shopper/internal audit"},
+      {"name": "Jumlah Transaksi Keuangan Tunai Payment Point", "unit": "number", "weight": 15, "target": "≥ 1.000 transaksi/bulan (≥ 12.000 transaksi/tahun)"},
+      {"name": "Tingkat Kesalahan Teller Payment Point", "unit": "percentage", "weight": 15, "target": "Maksimal 3 kesalahan dalam 1 tahun / < 5% dari total transaksi"},
+      {"name": "Penyelesaiaan Temuan audit external dan internal Sesuai Komitmen", "unit": "percentage", "weight": 10, "target": "≥ 90% tanpa temuan mayor"},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Teller Payment Point",
+    "kpis": [
+      {"name": "Dana Pihak Ketiga", "unit": "percentage", "weight": 20, "target": "RKAT"},
+      {"name": "Pertumbuhan NOA DPK", "unit": "percentage", "weight": 15, "target": "> 10 %/Tahun"},
+      {"name": "Indeks Standard Layanan Frontliner", "unit": "score", "weight": 20, "target": "Indeks minimal 4.00 (Baik) – berdasarkan hasil mistery shopper/internal audit"},
+      {"name": "Jumlah Transaksi Keuangan Tunai Payment Point", "unit": "number", "weight": 20, "target": "≥ 1.000 transaksi/bulan (≥ 12.000 transaksi/tahun)"},
+      {"name": "Tingkat Kesalahan Teller Payment Point", "unit": "percentage", "weight": 15, "target": "Sangat Jarang (< 5 % Dalam setahun)"},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Pemimpin Kas Mobil",
+    "kpis": [
+      {"name": "Dana Pihak Ketiga Kas Mobil", "unit": "currency", "weight": 20, "target": "RKAT"},
+      {"name": "DPK Syariah/DBLM", "unit": "currency", "weight": 5, "target": "UUS"},
+      {"name": "Indeks Kepuasan Nasabah Kas Mobil", "unit": "score", "weight": 10, "target": "Indeks 4 (Puas)"},
+      {"name": "Pembukaan Rekening / Aktivasi Account Kas Mobil", "unit": "currency", "weight": 15, "target": "≥ 200 rekening baru dalam setahun"},
+      {"name": "Produktivitas Kas Mobil (Jumlah Transaksi Setor dan Tarik Tunai, Pembayaran Pajak, RTGS/KU/Kliring, Pemindahbukuan)", "unit": "number", "weight": 10, "target": "≥ 3.000 transaksi/tahun atau ≥ 250 transaksi/bulan"},
+      {"name": "Tingkat Ketepatan Jadwal Layanan Kas Mobil", "unit": "percentage", "weight": 10, "target": "≥ 98% ketepatan jadwal layanan"},
+      {"name": "Tingkat Kesesuaian Ketersediaan Uang Tunai", "unit": "percentage", "weight": 10, "target": "≥ 98% sesuai kebutuhan / tidak kekurangan"},
+      {"name": "Penyelesaiaan Temuan audit external dan internal Sesuai Komitmen", "unit": "percentage", "weight": 10, "target": "≥ 95% audit internal tanpa temuan mayor"},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  },
+  {
+    "jabatan": "Operator Kas Mobil",
+    "kpis": [
+      {"name": "Dana Pihak Ketiga Kas Mobil", "unit": "currency", "weight": 20, "target": "RKAT"},
+      {"name": "Indeks Kepuasan Nasabah Kas Mobil", "unit": "score", "weight": 10, "target": "Indeks 4 (Puas)"},
+      {"name": "DPK Syariah/DBLM", "unit": "percentage", "weight": 5, "target": "RKAT UUS"},
+      {"name": "Produktivitas Kas Mobil (Jumlah Transaksi Setor dan Tarik Tunai, Pembayaran Pajak, RTGS/KU/Kliring, Pemindahbukuan)", "unit": "percentage", "weight": 20, "target": "≥ 3.000 transaksi/tahun atau ≥ 250 transaksi/bulan"},
+      {"name": "Pembukaan Rekening / Aktivasi Account Kas Mobil", "unit": "percentage", "weight": 20, "target": "≥ 200 rekening baru dalam setahun"},
+      {"name": "Tingkat Ketepatan Jadwal Layanan Kas Mobil", "unit": "percentage", "weight": 15, "target": "≥ 98% ketepatan jadwal layanan"},
+      {"name": "Culture Implementation Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"},
+      {"name": "Digital Skill Index", "unit": "score", "weight": 5, "target": "≥ 80 (Skala 0–100)"}
+    ]
+  }
+]

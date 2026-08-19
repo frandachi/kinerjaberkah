@@ -1,0 +1,376 @@
+const express = require('express');
+const db = require('../db');
+const authenticateToken = require('../middleware/auth');
+const authorizeRole = require('../middleware/authorize');
+const { auditMiddleware } = require('../middleware/audit');
+
+const router = express.Router();
+
+router.get('/', authenticateToken, async (req, res) => {
+  try {
+    // NOTE: the built frontend (Dashboard, AllKPI, CascadingKPI, KPIIndividu,
+    // KPIUnit, OKRJabatan, PerspectivePage, ...) always fetches this endpoint
+    // with no page/limit params and does its own client-side filtering
+    // (e.g. `kpis.filter(...)`) over the full result. It expects a bare
+    // array, not a {data, pagination} envelope - returning the envelope, or
+    // silently truncating to the old default LIMIT 100 (out of 15000+ rows),
+    // caused "n.filter is not a function" crashes and incomplete dashboards.
+    const { search = '' } = req.query;
+
+    let queryStr = 'SELECT * FROM kpis';
+    const queryParams = [];
+
+    let whereClauses = [];
+
+    if (req.user.role === 'user') {
+      whereClauses.push('jabatan = ? AND unit_name = ?');
+      queryParams.push(req.user.jabatan, req.user.unit_name);
+    } 
+    
+    if (search) {
+      whereClauses.push('(name LIKE ? OR unit_name LIKE ?)');
+      const searchParam = `%${search}%`;
+      queryParams.push(searchParam, searchParam);
+    }
+
+    if (whereClauses.length > 0) {
+      queryStr += ' WHERE ' + whereClauses.join(' AND ');
+    }
+
+    queryStr += ' ORDER BY created_at DESC';
+
+    const [kpis] = await db.query(queryStr, queryParams);
+
+    const parsedKpis = kpis.map(k => ({
+      ...k,
+      monthly_data: typeof k.monthly_data === 'string' ? JSON.parse(k.monthly_data) : (k.monthly_data || {}),
+      monthly_target: typeof k.monthly_target === 'string' ? JSON.parse(k.monthly_target) : (k.monthly_target || {})
+    }));
+
+    res.json(parsedKpis);
+  } catch (error) {
+    console.error('Get KPIs error:', error.message);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+  }
+});
+
+router.post('/', authenticateToken, authorizeRole('superadmin', 'admin'), auditMiddleware('CREATE_KPI'), async (req, res) => {
+  try {
+    const kpi = req.body;
+    const id = 'kpi_' + Date.now() + Math.floor(Math.random() * 1000);
+
+    await db.query(
+      'INSERT INTO kpis (id, name, perspective, unit, target, actual, weight, unit_name, jabatan, strategy_id, monthly_data, unit_type, status, description, formula, objective) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        id, kpi.name, kpi.perspective, kpi.unit, kpi.target || 0, kpi.actual || 0, kpi.weight || 0,
+        kpi.unit_name, kpi.jabatan, kpi.strategy_id, JSON.stringify(kpi.monthly_data || {}),
+        kpi.unit_type || 'pegawai', kpi.status || 'Draft', kpi.description || null, kpi.formula || null, kpi.objective || null
+      ]
+    );
+
+    const [newKpis] = await db.query('SELECT * FROM kpis WHERE id = ?', [id]);
+    res.status(201).json(newKpis[0]);
+  } catch (error) {
+    console.error('Create KPI error:', error.message);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+  }
+});
+
+router.post('/bulk', authenticateToken, authorizeRole('superadmin', 'admin'), auditMiddleware('BULK_INSERT_KPI'), async (req, res) => {
+  try {
+    const kpis = req.body;
+    if (!kpis || !kpis.length) return res.json([]);
+
+    for (const kpi of kpis) {
+      if (!kpi.objective && !kpi.name) continue;
+
+      const objName = kpi.objective || `Tujuan Strategis - ${kpi.perspective}`;
+
+      let [existingObj] = await db.query('SELECT id FROM objectives WHERE name = ? AND perspective = ?', [objName, kpi.perspective]);
+      let objectiveId;
+
+      if (existingObj.length === 0) {
+        objectiveId = 'obj_' + Date.now() + Math.floor(Math.random() * 1000);
+        await db.query(
+          'INSERT INTO objectives (id, name, perspective, description, divisi) VALUES (?, ?, ?, ?, ?)',
+          [objectiveId, objName, kpi.perspective, '', '']
+        );
+      } else {
+        objectiveId = existingObj[0].id;
+      }
+
+      let [existingStrategy] = await db.query('SELECT id FROM strategies WHERE name = ? AND objective_id = ?', [kpi.name, objectiveId]);
+      let strategyId;
+
+      if (existingStrategy.length === 0) {
+        strategyId = 'strat_' + Date.now() + Math.floor(Math.random() * 1000);
+        await db.query(
+          'INSERT INTO strategies (id, objective_id, name, perspective, unit, description, formula) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [strategyId, objectiveId, kpi.name, kpi.perspective, kpi.unit || '%', kpi.description || '', kpi.formula || '']
+        );
+      } else {
+        strategyId = existingStrategy[0].id;
+      }
+
+      kpi.strategy_id = strategyId;
+      kpi.objective = objName;
+    }
+
+    const uniqueUnitJabatans = [...new Set(kpis.map(k => `${k.unit_name}|${k.jabatan}`))];
+    for (const pair of uniqueUnitJabatans) {
+      const [unit_name, jabatan] = pair.split('|');
+      await db.query('DELETE FROM kpis WHERE unit_name = ? AND jabatan = ?', [unit_name, jabatan]);
+    }
+
+    const kpiValues = kpis.map((kpi, index) => [
+      'kpi_' + Date.now() + '_' + index,
+      kpi.name, kpi.perspective, kpi.unit, kpi.target || 0, kpi.actual || 0, kpi.weight || 0,
+      kpi.unit_name, kpi.jabatan, kpi.strategy_id || null, null, JSON.stringify(kpi.monthly_data || {}),
+      kpi.unit_type || null, kpi.parent_kpi_id || null, kpi.status || 'Draft',
+      kpi.description || null, kpi.formula || null, kpi.objective || null
+    ]);
+
+    await db.query(
+      'INSERT INTO kpis (id, name, perspective, unit, target, actual, weight, unit_name, jabatan, strategy_id, manual_indeks, monthly_data, unit_type, parent_kpi_id, status, description, formula, objective) VALUES ?',
+      [kpiValues]
+    );
+
+    res.json({ message: 'Bulk insert successful' });
+  } catch (error) {
+    console.error('Bulk KPI error:', error.message);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+  }
+});
+
+router.put('/:id', authenticateToken, authorizeRole('superadmin', 'admin'), auditMiddleware('UPDATE_KPI'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const kpi = req.body;
+
+    await db.query(
+      'UPDATE kpis SET name=?, perspective=?, unit=?, target=?, actual=?, weight=?, unit_name=?, jabatan=?, strategy_id=?, manual_indeks=?, monthly_data=?, monthly_target=?, status=?, unit_type=?, description=?, formula=?, objective=? WHERE id=?',
+      [
+        kpi.name, kpi.perspective, kpi.unit, kpi.target, kpi.actual, kpi.weight,
+        kpi.unit_name, kpi.jabatan, kpi.strategy_id || null,
+        kpi.manual_indeks !== undefined && kpi.manual_indeks !== null && kpi.manual_indeks !== '' ? kpi.manual_indeks : null,
+        JSON.stringify(kpi.monthly_data || {}),
+        JSON.stringify(kpi.monthly_target || {}),
+        kpi.status || 'Draft', kpi.unit_type || 'pegawai',
+        kpi.description || null, kpi.formula || null, kpi.objective || null, id
+      ]
+    );
+
+    const [updatedKpis] = await db.query('SELECT * FROM kpis WHERE id = ?', [id]);
+    if (updatedKpis.length === 0) {
+      return res.status(404).json({ message: 'KPI tidak ditemukan' });
+    }
+    const updatedKpi = updatedKpis[0];
+    updatedKpi.monthly_data = typeof updatedKpi.monthly_data === 'string' ? JSON.parse(updatedKpi.monthly_data) : (updatedKpi.monthly_data || {});
+    updatedKpi.monthly_target = typeof updatedKpi.monthly_target === 'string' ? JSON.parse(updatedKpi.monthly_target) : (updatedKpi.monthly_target || {});
+
+    res.json(updatedKpi);
+  } catch (error) {
+    console.error('Update KPI error:', error.message);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+  }
+});
+
+router.delete('/:id', authenticateToken, authorizeRole('superadmin', 'admin'), auditMiddleware('DELETE_KPI'), async (req, res) => {
+  try {
+    await db.query('DELETE FROM kpis WHERE id = ?', [req.params.id]);
+    res.json({ message: 'KPI berhasil dihapus' });
+  } catch (error) {
+    console.error('Delete KPI error:', error.message);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+  }
+});
+
+router.post('/submit', authenticateToken, auditMiddleware('SUBMIT_KPI'), async (req, res) => {
+  try {
+    const { jabatan, unit_name } = req.body;
+
+    if (!jabatan || !unit_name) {
+      return res.status(400).json({ message: 'Jabatan dan unit_name diperlukan' });
+    }
+
+    if (req.user.role === 'user' && (req.user.jabatan !== jabatan || req.user.unit_name !== unit_name)) {
+      return res.status(403).json({ message: 'Anda hanya bisa submit KPI Anda sendiri' });
+    }
+
+    await db.query(
+      'UPDATE kpis SET status = ? WHERE jabatan = ? AND unit_name = ?',
+      ['Submitted', jabatan, unit_name]
+    );
+
+    res.json({ message: 'KPI berhasil disubmit ke Pimpinan' });
+  } catch (error) {
+    console.error('Submit KPI error:', error.message);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+  }
+});
+
+router.get('/approval-list', authenticateToken, async (req, res) => {
+  try {
+    const pimpinanName = req.user.name;
+    const role = req.user.role;
+
+    let subordinates = [];
+    const unitNameQuery = req.query.unit_name;
+    const jabatanQuery = req.query.jabatan;
+
+    if (role === 'superadmin') {
+      let queryStr = 'SELECT name, npp, jabatan, unit_name, supervisi_approval FROM users WHERE role != "superadmin"';
+      let queryParams = [];
+
+      if (unitNameQuery && unitNameQuery !== 'All') {
+        queryStr += ' AND unit_name = ?';
+        queryParams.push(unitNameQuery);
+      }
+
+      if (jabatanQuery && jabatanQuery !== 'All') {
+        queryStr += ' AND jabatan = ?';
+        queryParams.push(jabatanQuery);
+      }
+
+      const [superadminSubordinates] = await db.query(queryStr, queryParams);
+      subordinates = superadminSubordinates;
+    } else {
+      const [directSubordinates] = await db.query(
+        'SELECT name, npp, jabatan, unit_name, supervisi_approval FROM users WHERE supervisi_approval = ?',
+        [pimpinanName]
+      );
+      subordinates = directSubordinates;
+    }
+
+    if (subordinates.length === 0) {
+      return res.json([]);
+    }
+
+    const jabatanUnitPairs = subordinates.map(s => [s.jabatan, s.unit_name]).filter(([j, u]) => j && u);
+
+    if (jabatanUnitPairs.length === 0) {
+      return res.json([]);
+    }
+
+    const placeholders = jabatanUnitPairs.map(() => '(jabatan = ? AND unit_name = ?)').join(' OR ');
+    const queryParams = jabatanUnitPairs.flat();
+
+    const [kpiRows] = await db.query(
+      `SELECT status, actual, target, weight, manual_indeks, jabatan, unit_name FROM kpis WHERE ${placeholders}`,
+      queryParams
+    );
+
+    const kpisMap = {};
+    for (const row of kpiRows) {
+      const key = `${row.jabatan}_${row.unit_name}`;
+      if (!kpisMap[key]) kpisMap[key] = [];
+      kpisMap[key].push(row);
+    }
+
+    const results = [];
+    for (const sub of subordinates) {
+      const key = `${sub.jabatan}_${sub.unit_name}`;
+      const kpis = kpisMap[key] || [];
+
+      if (kpis.length > 0) {
+        const status = kpis[0].status || 'Draft';
+        let totalBobot = 0;
+        let totalHasil = 0;
+
+        kpis.forEach(kpi => {
+          const weight = parseFloat(kpi.weight) || 0;
+          const pencapaian = kpi.target > 0 ? (kpi.actual / kpi.target) * 100 : 0;
+          const indeks = (kpi.manual_indeks !== undefined && kpi.manual_indeks !== null) ? kpi.manual_indeks : pencapaian;
+          const hasil = weight * (indeks / 100);
+          totalBobot += weight;
+          totalHasil += hasil;
+        });
+
+        results.push({
+          ...sub,
+          status,
+          total_kpi: kpis.length,
+          total_bobot: totalBobot,
+          total_hasil: totalHasil
+        });
+      } else {
+        results.push({
+          ...sub,
+          status: 'Belum Ada KPI',
+          total_kpi: 0,
+          total_bobot: 0,
+          total_hasil: 0
+        });
+      }
+    }
+
+    res.json(results);
+  } catch (error) {
+    console.error('Approval list error:', error.message);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+  }
+});
+
+router.post('/approve', authenticateToken, authorizeRole('superadmin', 'admin'), auditMiddleware('APPROVE_KPI'), async (req, res) => {
+  try {
+    const { jabatan, unit_name, action } = req.body;
+
+    if (!jabatan || !unit_name || !action) {
+      return res.status(400).json({ message: 'Missing parameters' });
+    }
+
+    const newStatus = action === 'Approve' ? 'Approved' : 'Rejected';
+
+    await db.query(
+      'UPDATE kpis SET status = ?, approved_by = ?, approved_at = NOW() WHERE jabatan = ? AND unit_name = ?',
+      [newStatus, req.user.name, jabatan, unit_name]
+    );
+
+    res.json({ message: `KPI berhasil di ${newStatus}` });
+  } catch (error) {
+    console.error('Approve KPI error:', error.message);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+  }
+});
+
+router.post('/lock', authenticateToken, authorizeRole('superadmin', 'admin'), auditMiddleware('LOCK_KPI'), async (req, res) => {
+  try {
+    const { jabatan, unit_name } = req.body;
+
+    if (!jabatan || !unit_name) {
+      return res.status(400).json({ message: 'Jabatan dan Unit Name diperlukan' });
+    }
+
+    await db.query(
+      'UPDATE kpis SET is_locked = TRUE, status = ? WHERE jabatan = ? AND unit_name = ?',
+      ['Approved', jabatan, unit_name]
+    );
+
+    res.json({ message: 'KPI berhasil disimpan (dikunci).' });
+  } catch (error) {
+    console.error('Lock KPI error:', error.message);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+  }
+});
+
+router.post('/unlock', authenticateToken, authorizeRole('superadmin', 'admin'), auditMiddleware('UNLOCK_KPI'), async (req, res) => {
+  try {
+    const { jabatan, unit_name } = req.body;
+
+    if (!jabatan || !unit_name) {
+      return res.status(400).json({ message: 'Jabatan dan Unit Name diperlukan' });
+    }
+
+    await db.query(
+      'UPDATE kpis SET is_locked = FALSE, status = ? WHERE jabatan = ? AND unit_name = ?',
+      ['Draft', jabatan, unit_name]
+    );
+
+    res.json({ message: 'KPI berhasil dibuka kuncinya.' });
+  } catch (error) {
+    console.error('Unlock KPI error:', error.message);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+  }
+});
+
+module.exports = router;

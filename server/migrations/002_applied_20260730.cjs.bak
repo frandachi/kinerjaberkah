@@ -1,0 +1,175 @@
+/**
+ * Consolidated schema-fix migration for Kinerja Berkah.
+ * Idempotent: safe to run multiple times.
+ *
+ * Fixes root causes of the following production errors:
+ *  - GET /api/kpis    500 (ORDER BY created_at on kpis table that had no created_at column)
+ *  - GET /api/users   500 (SELECT/ORDER BY created_at, last_login that didn't exist)
+ *  - GET /api/mutations 500 (mutation_history table missing entirely)
+ *  - GET /api/objectives 404 (no route + no created_at column to support it)
+ *  - 2FA endpoints 500 (totp_secret / totp_enabled columns missing)
+ *  - Change password 500 (password_history table missing, password_changed_at column missing)
+ *  - Maker-checker endpoints 500 (maker_checker table missing)
+ *  - Login lockout / last_login silently broken (failed_attempts, locked_until, last_login missing)
+ *  - Activity log inserts silently failing (user_id / ip_address columns missing on activity_logs)
+ */
+const db = require('./db');
+
+async function columnExists(table, column) {
+  const [rows] = await db.query(
+    `SELECT COUNT(*) as cnt FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+    [table, column]
+  );
+  return rows[0].cnt > 0;
+}
+
+async function indexExists(table, indexName) {
+  const [rows] = await db.query(
+    `SELECT COUNT(*) as cnt FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?`,
+    [table, indexName]
+  );
+  return rows[0].cnt > 0;
+}
+
+async function addColumn(table, column, definition) {
+  if (await columnExists(table, column)) {
+    console.log(`  - ${table}.${column} already exists, skipping`);
+    return;
+  }
+  await db.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  console.log(`  + added ${table}.${column}`);
+}
+
+async function addIndex(table, indexName, columns) {
+  if (await indexExists(table, indexName)) {
+    console.log(`  - index ${indexName} on ${table} already exists, skipping`);
+    return;
+  }
+  await db.query(`ALTER TABLE ${table} ADD INDEX ${indexName} (${columns})`);
+  console.log(`  + added index ${indexName} on ${table}`);
+}
+
+async function run() {
+  console.log('--- users: security & audit columns ---');
+  await addColumn('users', 'failed_attempts', 'INT DEFAULT 0');
+  await addColumn('users', 'locked_until', 'DATETIME NULL');
+  await addColumn('users', 'last_login', 'DATETIME NULL');
+  await addColumn('users', 'password_changed_at', 'DATETIME NULL');
+  await addColumn('users', 'totp_secret', 'VARCHAR(255) NULL');
+  await addColumn('users', 'totp_enabled', 'BOOLEAN DEFAULT FALSE');
+  await addColumn('users', 'created_at', 'TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP');
+
+  console.log('--- kpis: audit trail + created_at ---');
+  await addColumn('kpis', 'approved_by', 'VARCHAR(255) NULL');
+  await addColumn('kpis', 'approved_at', 'DATETIME NULL');
+  await addColumn('kpis', 'created_by', 'VARCHAR(100) NULL');
+  await addColumn('kpis', 'updated_by', 'VARCHAR(100) NULL');
+  await addColumn('kpis', 'created_at', 'TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP');
+
+  console.log('--- objectives: created_at (needed for ordering) ---');
+  await addColumn('objectives', 'created_at', 'TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP');
+
+  console.log('--- activity_logs: user_id + ip_address ---');
+  await addColumn('activity_logs', 'user_id', 'VARCHAR(100) NULL');
+  await addColumn('activity_logs', 'ip_address', 'VARCHAR(45) NULL');
+
+  console.log('--- password_history table ---');
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS password_history (
+      id VARCHAR(100) PRIMARY KEY,
+      user_id VARCHAR(100) NOT NULL,
+      password_hash VARCHAR(255) NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  console.log('  + ensured password_history table');
+
+  console.log('--- maker_checker table ---');
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS maker_checker (
+      id VARCHAR(100) PRIMARY KEY,
+      maker_id VARCHAR(100) NOT NULL,
+      checker_id VARCHAR(100) NULL,
+      action_type VARCHAR(100) NOT NULL,
+      target_id VARCHAR(100) NULL,
+      details JSON,
+      reason TEXT,
+      checker_comments TEXT,
+      status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      approved_at DATETIME NULL,
+      FOREIGN KEY (maker_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (checker_id) REFERENCES users(id) ON DELETE SET NULL
+    )
+  `);
+  console.log('  + ensured maker_checker table');
+
+  console.log('--- mutation_history table (pegawai_id fixed to VARCHAR to match pegawai.id) ---');
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS mutation_history (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      pegawai_id VARCHAR(100) NOT NULL,
+      npp VARCHAR(50) NOT NULL,
+      employee_name VARCHAR(255) NOT NULL,
+
+      old_unit_name VARCHAR(255) NOT NULL,
+      old_jabatan VARCHAR(255) NOT NULL,
+      old_unit_type VARCHAR(50),
+
+      new_unit_name VARCHAR(255) NOT NULL,
+      new_jabatan VARCHAR(255) NOT NULL,
+      new_unit_type VARCHAR(50),
+
+      effective_date DATE NOT NULL,
+
+      old_period_start DATE NOT NULL,
+      old_period_end DATE NOT NULL,
+      new_period_start DATE NOT NULL,
+      new_period_end DATE NOT NULL,
+
+      old_kpi_ids JSON COMMENT 'Array of KPI IDs from old unit',
+      new_kpi_ids JSON COMMENT 'Array of KPI IDs from new unit',
+
+      status ENUM('active', 'completed') DEFAULT 'active',
+
+      created_by VARCHAR(100),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+      INDEX idx_pegawai_id (pegawai_id),
+      INDEX idx_effective_date (effective_date),
+      INDEX idx_npp (npp)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
+  console.log('  + ensured mutation_history table');
+
+  console.log('--- performance indexes ---');
+  await addIndex('users', 'idx_users_username', 'username');
+  await addIndex('users', 'idx_users_npp', 'npp');
+  await addIndex('users', 'idx_users_jabatan', 'jabatan');
+  await addIndex('users', 'idx_users_unit_name', 'unit_name');
+  await addIndex('users', 'idx_users_role', 'role');
+  await addIndex('kpis', 'idx_kpis_jabatan_unit', 'jabatan, unit_name');
+  await addIndex('kpis', 'idx_kpis_status', 'status');
+  await addIndex('kpis', 'idx_kpis_unit_name', 'unit_name');
+  await addIndex('kpis', 'idx_kpis_perspective', 'perspective');
+  await addIndex('pegawai', 'idx_pegawai_npp', 'npp');
+  await addIndex('pegawai', 'idx_pegawai_jabatan', 'jabatan');
+  await addIndex('pegawai', 'idx_pegawai_unit', 'unit_name');
+  await addIndex('activity_logs', 'idx_activity_logs_user', 'user_id');
+  await addIndex('activity_logs', 'idx_activity_logs_created', 'created_at');
+  await addIndex('password_history', 'idx_password_history_user', 'user_id');
+  await addIndex('maker_checker', 'idx_maker_checker_status', 'status');
+
+  console.log('\nAll migrations applied successfully.');
+}
+
+run()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error('Migration failed:', err);
+    process.exit(1);
+  });

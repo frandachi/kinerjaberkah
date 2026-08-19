@@ -1,0 +1,77 @@
+[
+  {
+    "jabatan": "Pelaksana",
+    "kpis": [
+      {
+        "name": "Pendapatan Feebase Income",
+        "unit": "Juta Rupiah",
+        "weight": 15,
+        "target": "RKAT",
+        "perspective": "internal_process"
+      },
+      {
+        "name": "CIR",
+        "unit": "Percent %",
+        "weight": 15,
+        "target": "RKAT",
+        "perspective": "internal_process"
+      },
+      {
+        "name": "Dana Pihak Ketiga",
+        "unit": "Juta Rupiah",
+        "weight": 15,
+        "target": "Rp. 2.000.000.000/Tahun",
+        "perspective": "internal_process"
+      },
+      {
+        "name": "Indeks Kepuasan Pelanggan",
+        "unit": "Indeks",
+        "weight": 10,
+        "target": "Indeks 4",
+        "perspective": "internal_process"
+      },
+      {
+        "name": "DPK Syariah/DBLM",
+        "unit": "Juta Rupiah",
+        "weight": 5,
+        "target": "UUS",
+        "perspective": "internal_process"
+      },
+      {
+        "name": "Tata Kelola Agunan Dan Arsip",
+        "unit": "Percent %",
+        "weight": 10,
+        "target": "100 %",
+        "perspective": "internal_process"
+      },
+      {
+        "name": "Klaim Asuransi",
+        "unit": "Percent %",
+        "weight": 10,
+        "target": "100 %",
+        "perspective": "internal_process"
+      },
+      {
+        "name": "Penyelesaiaan Temuan audit external dan internal Sesuai Komitmen",
+        "unit": "Percent %",
+        "weight": 10,
+        "target": "≥ 90% tanpa temuan mayor",
+        "perspective": "internal_process"
+      },
+      {
+        "name": "Culture Implementation Index",
+        "unit": "Indeks",
+        "weight": 5,
+        "target": "≥ 80 (Skala 0–100)",
+        "perspective": "internal_process"
+      },
+      {
+        "name": "Digital Skill Index",
+        "unit": "Indeks",
+        "weight": 5,
+        "target": "≥ 80 (Skala 0–100)",
+        "perspective": "internal_process"
+      }
+    ]
+  }
+]

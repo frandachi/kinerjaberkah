@@ -1,0 +1,65 @@
+2026-05-19T08:24:09.371Z [ERROR] Not allowed by CORS
+Error: Not allowed by CORS
+    at origin (/Users/Digital Banking/KPI Corporate/server/index.js:66:16)
+    at /Users/Digital Banking/KPI Corporate/server/node_modules/cors/lib/index.js:219:13
+    at optionsCallback (/Users/Digital Banking/KPI Corporate/server/node_modules/cors/lib/index.js:199:9)
+    at corsMiddleware (/Users/Digital Banking/KPI Corporate/server/node_modules/cors/lib/index.js:204:7)
+    at Layer.handleRequest (/Users/Digital Banking/KPI Corporate/server/node_modules/router/lib/layer.js:152:17)
+    at trimPrefix (/Users/Digital Banking/KPI Corporate/server/node_modules/router/index.js:342:13)
+    at /Users/Digital Banking/KPI Corporate/server/node_modules/router/index.js:297:9
+    at processParams (/Users/Digital Banking/KPI Corporate/server/node_modules/router/index.js:582:12)
+    at next (/Users/Digital Banking/KPI Corporate/server/node_modules/router/index.js:291:5)
+    at internalNext (/Users/Digital Banking/KPI Corporate/server/node_modules/helmet/index.cjs:531:6)
+---
+2026-05-19T09:08:56.084Z [ERROR] Not allowed by CORS
+Error: Not allowed by CORS
+    at origin (/Users/Digital Banking/KPI Corporate/server/index.js:66:16)
+    at /Users/Digital Banking/KPI Corporate/server/node_modules/cors/lib/index.js:219:13
+    at optionsCallback (/Users/Digital Banking/KPI Corporate/server/node_modules/cors/lib/index.js:199:9)
+    at corsMiddleware (/Users/Digital Banking/KPI Corporate/server/node_modules/cors/lib/index.js:204:7)
+    at Layer.handleRequest (/Users/Digital Banking/KPI Corporate/server/node_modules/router/lib/layer.js:152:17)
+    at trimPrefix (/Users/Digital Banking/KPI Corporate/server/node_modules/router/index.js:342:13)
+    at /Users/Digital Banking/KPI Corporate/server/node_modules/router/index.js:297:9
+    at processParams (/Users/Digital Banking/KPI Corporate/server/node_modules/router/index.js:582:12)
+    at next (/Users/Digital Banking/KPI Corporate/server/node_modules/router/index.js:291:5)
+    at internalNext (/Users/Digital Banking/KPI Corporate/server/node_modules/helmet/index.cjs:531:6)
+---
+2026-05-19T09:11:40.681Z [ERROR] Not allowed by CORS
+Error: Not allowed by CORS
+    at origin (/Users/Digital Banking/KPI Corporate/server/index.js:66:16)
+    at /Users/Digital Banking/KPI Corporate/server/node_modules/cors/lib/index.js:219:13
+    at optionsCallback (/Users/Digital Banking/KPI Corporate/server/node_modules/cors/lib/index.js:199:9)
+    at corsMiddleware (/Users/Digital Banking/KPI Corporate/server/node_modules/cors/lib/index.js:204:7)
+    at Layer.handleRequest (/Users/Digital Banking/KPI Corporate/server/node_modules/router/lib/layer.js:152:17)
+    at trimPrefix (/Users/Digital Banking/KPI Corporate/server/node_modules/router/index.js:342:13)
+    at /Users/Digital Banking/KPI Corporate/server/node_modules/router/index.js:297:9
+    at processParams (/Users/Digital Banking/KPI Corporate/server/node_modules/router/index.js:582:12)
+    at next (/Users/Digital Banking/KPI Corporate/server/node_modules/router/index.js:291:5)
+    at internalNext (/Users/Digital Banking/KPI Corporate/server/node_modules/helmet/index.cjs:531:6)
+---
+2026-05-19T09:11:45.943Z [ERROR] Not allowed by CORS
+Error: Not allowed by CORS
+    at origin (/Users/Digital Banking/KPI Corporate/server/index.js:66:16)
+    at /Users/Digital Banking/KPI Corporate/server/node_modules/cors/lib/index.js:219:13
+    at optionsCallback (/Users/Digital Banking/KPI Corporate/server/node_modules/cors/lib/index.js:199:9)
+    at corsMiddleware (/Users/Digital Banking/KPI Corporate/server/node_modules/cors/lib/index.js:204:7)
+    at Layer.handleRequest (/Users/Digital Banking/KPI Corporate/server/node_modules/router/lib/layer.js:152:17)
+    at trimPrefix (/Users/Digital Banking/KPI Corporate/server/node_modules/router/index.js:342:13)
+    at /Users/Digital Banking/KPI Corporate/server/node_modules/router/index.js:297:9
+    at processParams (/Users/Digital Banking/KPI Corporate/server/node_modules/router/index.js:582:12)
+    at next (/Users/Digital Banking/KPI Corporate/server/node_modules/router/index.js:291:5)
+    at internalNext (/Users/Digital Banking/KPI Corporate/server/node_modules/helmet/index.cjs:531:6)
+---
+2026-05-19T09:14:02.343Z [ERROR] Not allowed by CORS
+Error: Not allowed by CORS
+    at origin (/Users/Digital Banking/KPI Corporate/server/index.js:66:16)
+    at /Users/Digital Banking/KPI Corporate/server/node_modules/cors/lib/index.js:219:13
+    at optionsCallback (/Users/Digital Banking/KPI Corporate/server/node_modules/cors/lib/index.js:199:9)
+    at corsMiddleware (/Users/Digital Banking/KPI Corporate/server/node_modules/cors/lib/index.js:204:7)
+    at Layer.handleRequest (/Users/Digital Banking/KPI Corporate/server/node_modules/router/lib/layer.js:152:17)
+    at trimPrefix (/Users/Digital Banking/KPI Corporate/server/node_modules/router/index.js:342:13)
+    at /Users/Digital Banking/KPI Corporate/server/node_modules/router/index.js:297:9
+    at processParams (/Users/Digital Banking/KPI Corporate/server/node_modules/router/index.js:582:12)
+    at next (/Users/Digital Banking/KPI Corporate/server/node_modules/router/index.js:291:5)
+    at internalNext (/Users/Digital Banking/KPI Corporate/server/node_modules/helmet/index.cjs:531:6)
+---
