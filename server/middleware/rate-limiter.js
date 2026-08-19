@@ -25,4 +25,12 @@ const activateLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-module.exports = { loginLimiter, apiLimiter, activateLimiter };
+const captchaLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 40,
+  message: { message: 'Terlalu banyak permintaan captcha. Silakan coba lagi nanti.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+module.exports = { loginLimiter, apiLimiter, activateLimiter, captchaLimiter };

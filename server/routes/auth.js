@@ -4,9 +4,10 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../db');
 const authenticateToken = require('../middleware/auth');
-const { loginLimiter } = require('../middleware/rate-limiter');
+const { loginLimiter, captchaLimiter } = require('../middleware/rate-limiter');
 const { auditMiddleware } = require('../middleware/audit');
 const { verifyTOTP, isTotpEnabled, sanitizeUser } = require('../lib/totp');
+const { createCaptcha, consumeCaptcha } = require('../lib/captcha');
 
 const router = express.Router();
 
@@ -47,10 +48,18 @@ async function issueSession(res, user) {
   res.json({ user: sanitizeUser(user), token });
 }
 
+router.get('/captcha', captchaLimiter, (req, res) => {
+  res.json(createCaptcha());
+});
+
 router.post('/login', loginLimiter, async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, captchaId, captcha } = req.body;
   
   try {
+    if (!consumeCaptcha(captchaId, captcha)) {
+      return res.status(400).json({ message: 'Captcha tidak valid. Silakan muat ulang gambar.' });
+    }
+
     const [users] = await db.query(
       'SELECT * FROM users WHERE username = ? OR npp = ? LIMIT 1',
       [username, username]

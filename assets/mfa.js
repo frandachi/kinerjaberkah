@@ -166,7 +166,7 @@
   }
 
   const nativeFetch = window.fetch.bind(window);
-  window.__kbNativeFetch = nativeFetch;
+  if (!window.__kbNativeFetch) window.__kbNativeFetch = nativeFetch;
 
   window.fetch = async function (input, init) {
     const url = typeof input === 'string' ? input : (input && input.url) || '';
