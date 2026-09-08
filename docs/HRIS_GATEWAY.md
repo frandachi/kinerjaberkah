@@ -174,7 +174,7 @@ Response contoh:
 
 | Gejala | Cek |
 | --- | --- |
-| Log `HRIS authLogin fallback to local` | Network, env, `rcode`, format body Base64 |
+| Log `HRIS authLogin fallback to local` | Network, env, `rcode`, format credential AES |
 | Gateway connection / timeout | Firewall dari `192.168.3.13` ke `:8077` |
 | `rcode` bukan `00` | Kredensial user HRIS / API key / client id & key |
 | Signature ditolak gateway | Saat ini `X-Signature` sengaja kosong; aktifkan HMAC signature jika gateway mewajibkan |
