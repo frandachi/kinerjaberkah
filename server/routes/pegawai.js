@@ -303,104 +303,21 @@ router.delete('/:id', authenticateToken, authorizeRole('superadmin'), async (req
 
 router.post('/sync-hris', authenticateToken, authorizeRole('admin', 'superadmin'), async (req, res) => {
   try {
-    const http = require('http');
-    const https = require('https');
-    const requestHrisJson = (url) => new Promise((resolve, reject) => {
-      const client = url.startsWith('https://') ? https : http;
-      const reqHris = client.request(url, {
-        method: 'GET',
-        headers: { 'Auth-Key': process.env.HRIS_AUTH_KEY || '' },
-        rejectUnauthorized: false,
-      }, (response) => {
-        let raw = '';
-        response.setEncoding('utf8');
-        response.on('data', (chunk) => { raw += chunk; });
-        response.on('end', () => {
-          if ((response.statusCode || 500) < 200 || (response.statusCode || 500) >= 300) {
-            return reject(new Error(`HRIS request failed with status ${response.statusCode} via ${url}`));
-          }
-          try {
-            resolve(JSON.parse(raw));
-          } catch (parseError) {
-            reject(new Error(`HRIS returned invalid JSON via ${url}: ${parseError.message}`));
-          }
-        });
-      });
-      reqHris.on('error', reject);
-      reqHris.setTimeout(10000, () => reqHris.destroy(new Error(`HRIS request timeout via ${url}`)));
-      reqHris.end();
-    });
+    const { inqMasterPegawaiByKondisi } = require('../lib/hris-gateway');
+    const { syncPegawaiList } = require('../lib/hris-upsert');
 
-    let hrisData;
-    const attemptErrors = [];
-    for (const candidateUrl of [
-      'https://192.168.3.90/ecaimut_service_hris/api/applyform/master_pegawai',
-      'http://192.168.3.90/ecaimut_service_hris/api/applyform/master_pegawai',
-    ]) {
-      try {
-        hrisData = await requestHrisJson(candidateUrl);
-        break;
-      } catch (attemptError) {
-        attemptErrors.push({ url: candidateUrl, message: attemptError.message });
-      }
-    }
-
-    if (typeof hrisData === 'undefined') {
-      throw new Error(`Semua endpoint HRIS gagal: ${attemptErrors.map((item) => `${item.url} => ${item.message}`).join(' | ')}`);
-    }
-
+    const hrisData = await inqMasterPegawaiByKondisi('');
     if (!Array.isArray(hrisData)) {
       throw new Error('Data HRIS tidak valid (bukan array)');
     }
 
-    const [existing] = await db.query('SELECT id, npp FROM pegawai');
-    const existingMap = new Map(existing.map(p => [p.npp, p.id]));
-
-    let insertedCount = 0;
-    let updatedCount = 0;
-
-    const connection = await db.getConnection();
-    await connection.beginTransaction();
-
-    try {
-      for (const p of hrisData) {
-        const npp = p.nrik;
-        const name = p.nama;
-        const jabatan = p.nm_jabatan || '';
-        const unit_name = p.nm_unit_kerja || '';
-
-        if (!npp || !name) continue;
-
-        const existingId = existingMap.get(npp);
-        if (existingId) {
-          await connection.query(
-            'UPDATE pegawai SET name=?, jabatan=?, unit_name=? WHERE id=?',
-            [name, jabatan, unit_name, existingId]
-          );
-          await connection.query(
-            'UPDATE users SET jabatan=?, unit_name=? WHERE pegawai_id=?',
-            [jabatan, unit_name, existingId]
-          );
-          updatedCount++;
-        } else {
-          const newId = crypto.randomUUID();
-          await connection.query(
-            'INSERT INTO pegawai (id, name, npp, jabatan, unit_name) VALUES (?, ?, ?, ?, ?)',
-            [newId, name, npp, jabatan, unit_name]
-          );
-          insertedCount++;
-        }
-      }
-
-      await connection.commit();
-    } catch (err) {
-      await connection.rollback();
-      throw err;
-    } finally {
-      connection.release();
-    }
-
-    res.json({ message: 'Sinkronisasi berhasil', inserted: insertedCount, updated: updatedCount });
+    const { inserted, updated, usersCreated } = await syncPegawaiList(hrisData);
+    res.json({
+      message: 'Sinkronisasi berhasil',
+      inserted,
+      updated,
+      usersCreated,
+    });
   } catch (error) {
     res.status(500).json({ message: 'Gagal sinkronisasi data dari HRIS', error: error.message });
   }

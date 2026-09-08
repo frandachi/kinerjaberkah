@@ -8,6 +8,8 @@ const { loginLimiter, captchaLimiter } = require('../middleware/rate-limiter');
 const { auditMiddleware } = require('../middleware/audit');
 const { verifyTOTP, isTotpEnabled, sanitizeUser, generateSecret, otpauthURL, qrDataUrl } = require('../lib/totp');
 const { createCaptcha, consumeCaptcha } = require('../lib/captcha');
+const { authLogin } = require('../lib/hris-gateway');
+const { upsertFromHrisLogin } = require('../lib/hris-upsert');
 
 const router = express.Router();
 
@@ -70,73 +72,97 @@ router.get('/captcha', captchaLimiter, (req, res) => {
   res.json(createCaptcha());
 });
 
+function respondMfaGate(res, user) {
+  if (isTotpEnabled(user)) {
+    return res.json({
+      requires2FA: true,
+      mfaToken: signMfaToken(user, 'mfa', '5m'),
+      message: 'Masukkan kode MFA dari aplikasi authenticator',
+    });
+  }
+
+  return res.json({
+    requiresMFASetup: true,
+    mfaToken: signMfaToken(user, 'mfa-enroll', '10m'),
+    message: 'MFA wajib. Aktifkan authenticator untuk melanjutkan.',
+  });
+}
+
+async function rejectFailedLogin(res, user) {
+  const failCount = (user.failed_attempts !== undefined ? user.failed_attempts : 0) + 1;
+
+  if (failCount >= 5) {
+    const lockUntil = new Date(Date.now() + 30 * 60 * 1000);
+    try {
+      await db.query(
+        'UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?',
+        [failCount, lockUntil, user.id]
+      );
+    } catch (e) { /* Kolom tidak ada, abaikan */ }
+    return res.status(423).json({
+      message: 'Akun terkunci selama 30 menit karena terlalu banyak percobaan gagal.',
+    });
+  }
+
+  try {
+    await db.query(
+      'UPDATE users SET failed_attempts = ? WHERE id = ?',
+      [failCount, user.id]
+    );
+  } catch (e) { /* Kolom tidak ada, abaikan */ }
+
+  return res.status(401).json({ message: 'Username atau password salah' });
+}
+
 router.post('/login', loginLimiter, async (req, res) => {
   const { username, password, captchaId, captcha } = req.body;
-  
+
   try {
     if (!consumeCaptcha(captchaId, captcha)) {
       return res.status(400).json({ message: 'Captcha tidak valid. Silakan muat ulang gambar.' });
     }
 
-    const [users] = await db.query(
-      'SELECT * FROM users WHERE username = ? OR npp = ? LIMIT 1',
-      [username, username]
-    );
+    let user = null;
 
-    if (users.length === 0) {
-      return res.status(401).json({ message: 'Username atau password salah' });
+    try {
+      const hrisRows = await authLogin({ username, password });
+      if (hrisRows && hrisRows.length > 0) {
+        const upserted = await upsertFromHrisLogin(hrisRows[0], password);
+        user = upserted.user;
+      }
+    } catch (hrisError) {
+      console.warn('HRIS authLogin fallback to local:', hrisError.message);
     }
 
-    const user = users[0];
+    if (!user) {
+      const [users] = await db.query(
+        'SELECT * FROM users WHERE username = ? OR npp = ? LIMIT 1',
+        [username, username]
+      );
 
-    if (user.locked_until && new Date() < new Date(user.locked_until)) {
-      return res.status(423).json({ 
-        message: `Akun terkunci. Silakan coba lagi setelah ${new Date(user.locked_until).toLocaleString('id-ID')}` 
-      });
-    }
+      if (users.length === 0) {
+        return res.status(401).json({ message: 'Username atau password salah' });
+      }
 
-    const isValidPassword = await verifyPassword(password, user.password);
+      user = users[0];
 
-    if (!isValidPassword) {
-      // Periksa apakah kolom failed_attempts ada, jika tidak anggap 0
-      const failCount = (user.failed_attempts !== undefined ? user.failed_attempts : 0) + 1;
-      
-      if (failCount >= 5) {
-        const lockUntil = new Date(Date.now() + 30 * 60 * 1000);
-        try {
-          await db.query(
-            'UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?',
-            [failCount, lockUntil, user.id]
-          );
-        } catch(e) { /* Kolom tidak ada, abaikan */ }
-        return res.status(423).json({ 
-          message: 'Akun terkunci selama 30 menit karena terlalu banyak percobaan gagal.' 
+      if (user.locked_until && new Date() < new Date(user.locked_until)) {
+        return res.status(423).json({
+          message: `Akun terkunci. Silakan coba lagi setelah ${new Date(user.locked_until).toLocaleString('id-ID')}`,
         });
       }
 
-      try {
-        await db.query(
-          'UPDATE users SET failed_attempts = ? WHERE id = ?',
-          [failCount, user.id]
-        );
-      } catch(e) { /* Kolom tidak ada, abaikan */ }
-
-      return res.status(401).json({ message: 'Username atau password salah' });
-    }
-
-    if (isTotpEnabled(user)) {
-      return res.json({
-        requires2FA: true,
-        mfaToken: signMfaToken(user, 'mfa', '5m'),
-        message: 'Masukkan kode MFA dari aplikasi authenticator',
+      const isValidPassword = await verifyPassword(password, user.password);
+      if (!isValidPassword) {
+        return rejectFailedLogin(res, user);
+      }
+    } else if (user.locked_until && new Date() < new Date(user.locked_until)) {
+      return res.status(423).json({
+        message: `Akun terkunci. Silakan coba lagi setelah ${new Date(user.locked_until).toLocaleString('id-ID')}`,
       });
     }
 
-    return res.json({
-      requiresMFASetup: true,
-      mfaToken: signMfaToken(user, 'mfa-enroll', '10m'),
-      message: 'MFA wajib. Aktifkan authenticator untuk melanjutkan.',
-    });
+    return respondMfaGate(res, user);
   } catch (error) {
     console.error('Login error:', error.message);
     res.status(500).json({ message: 'Terjadi kesalahan pada server' });

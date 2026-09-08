@@ -254,12 +254,15 @@ router.put('/:id', authenticateToken, authorizeRole('superadmin'), auditMiddlewa
     const { id } = req.params;
     const { name, username, password, jabatan, unit_name, role, supervisi_approval, npp } = req.body;
 
-    const [existingUsers] = await db.query('SELECT pegawai_id FROM users WHERE id = ?', [id]);
+    const [existingUsers] = await db.query('SELECT pegawai_id, role FROM users WHERE id = ?', [id]);
     if (existingUsers.length === 0) {
       return res.status(404).json({ message: 'User tidak ditemukan' });
     }
 
     const pegawai_id = existingUsers[0].pegawai_id;
+    const nextRole = role === undefined || role === null || role === ''
+      ? existingUsers[0].role
+      : role;
 
     await db.query(
       'UPDATE pegawai SET name=?, npp=?, jabatan=?, unit_name=? WHERE id=?',
@@ -270,12 +273,12 @@ router.put('/:id', authenticateToken, authorizeRole('superadmin'), auditMiddlewa
       const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
       await db.query(
         'UPDATE users SET name=?, username=?, password=?, jabatan=?, unit_name=?, role=?, supervisi_approval=?, npp=? WHERE id=?',
-        [name || '', username || '', hashedPassword, jabatan || '', unit_name || '', role || 'user', supervisi_approval || '', npp || username || '', id]
+        [name || '', username || '', hashedPassword, jabatan || '', unit_name || '', nextRole, supervisi_approval || '', npp || username || '', id]
       );
     } else {
       await db.query(
         'UPDATE users SET name=?, username=?, jabatan=?, unit_name=?, role=?, supervisi_approval=?, npp=? WHERE id=?',
-        [name || '', username || '', jabatan || '', unit_name || '', role || 'user', supervisi_approval || '', npp || username || '', id]
+        [name || '', username || '', jabatan || '', unit_name || '', nextRole, supervisi_approval || '', npp || username || '', id]
       );
     }
 
