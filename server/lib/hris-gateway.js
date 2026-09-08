@@ -36,8 +36,28 @@ function getClientSecret(timestamp, cfg = getConfig()) {
   return crypto.createHmac('sha256', cfg.clientKey).update(plain, 'utf8').digest('base64');
 }
 
+/** Plain Base64 (legacy / non-AES fields). */
 function encodeCredential(plain) {
   return Buffer.from(String(plain ?? ''), 'utf8').toString('base64');
+}
+
+/**
+ * Mirror PHP ServiceHelper::encrypted — AES-256-CBC, IV prepended, double base64.
+ * Gateway authLogin decrypts userId/password with CLIENT_KEY[0..32].
+ */
+function encryptCredential(plain, cfg = getConfig()) {
+  const key = Buffer.from(String(cfg.clientKey || '').slice(0, 32), 'utf8');
+  if (key.length !== 32) {
+    throw new Error('HRIS_CLIENT_KEY harus minimal 32 karakter untuk AES credential');
+  }
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+  const encrypted = Buffer.concat([
+    cipher.update(Buffer.from(String(plain ?? ''), 'utf8')),
+    cipher.final(),
+  ]);
+  const once = Buffer.concat([iv, encrypted]).toString('base64');
+  return Buffer.from(once, 'utf8').toString('base64');
 }
 
 function postJson(path, body) {
@@ -118,8 +138,8 @@ function assertOk(decoded, label) {
 async function authLogin({ username, password }) {
   const { body } = await postJson('/hris/authLogin', {
     reqid: 'HR001',
-    userId: encodeCredential(username),
-    password: encodeCredential(password),
+    userId: encryptCredential(username),
+    password: encryptCredential(password),
   });
   const decoded = assertOk(body, 'authLogin');
   const data = Array.isArray(decoded.data) ? decoded.data : decoded.data ? [decoded.data] : [];
@@ -145,6 +165,7 @@ module.exports = {
   buildTimestamp,
   getClientSecret,
   encodeCredential,
+  encryptCredential,
   postJson,
   authLogin,
   inqMasterPegawaiByKondisi,

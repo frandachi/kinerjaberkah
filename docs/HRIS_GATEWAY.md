@@ -85,15 +85,23 @@ Plain untuk client-secret:
 
 ### authLogin
 
+`userId` / `password` memakai **AES-256-CBC** seperti `ServiceHelper::encrypted` (bukan Base64 plain):
+
+1. Key = 32 karakter pertama `HRIS_CLIENT_KEY`
+2. IV random 16 byte + ciphertext
+3. `base64(base64(iv || cipher))` (double base64)
+
 ```json
 {
   "reqid": "HR001",
-  "userId": "<base64(username)>",
-  "password": "<base64(password)>"
+  "userId": "<aes-encrypted>",
+  "password": "<aes-encrypted>"
 }
 ```
 
 Sukses: `rcode === "00"`; data pegawai di `data` (atau `result`).
+
+Jika salah kirim Base64 plain, gateway log: `decrypted Error ... Incorrect IV length` dan `nama_login: None`.
 
 ### inqMasterPegawaiByKondisi
 
@@ -174,4 +182,4 @@ Response contoh:
 ## Catatan lanjutan
 
 - Port `getSignature` (HMAC atas `clientSecret + '&' + json payload`) mengikuti PHP `ServiceHelper::getSignature` bila gateway mulai mewajibkan signature.
-- Encoding body login saat ini Base64 plain (bukan AES `encrypted()` milik smart-graha).
+- Encoding body login: AES double-base64 (`encryptCredential`), sama pola smart-graha `ServiceHelper::encrypted`.
