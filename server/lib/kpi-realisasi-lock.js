@@ -35,47 +35,38 @@ function parseMonthlyData(raw) {
   }
 }
 
-function getEffectiveLockedMonths(kpi) {
-  const locked = parseLockedMonths(kpi.monthly_data_locked);
-  if (locked.length > 0) return locked;
-
-  const md = parseMonthlyData(kpi.monthly_data);
-  return IMPORTED_REALISASI_MONTHS.filter((m) => {
-    const val = md[m];
-    return val !== undefined && val !== null && val !== '' && Number(val) !== 0;
-  });
+/**
+ * Input realisasi/target dibuka untuk semua role.
+ * monthly_data_locked dipertahankan di DB untuk audit, tapi tidak lagi memblokir input.
+ */
+function getEffectiveLockedMonths(_kpi) {
+  return [];
 }
 
-function isMonthLockedForUser(kpi, month, userRole) {
-  if (userRole === 'admin' || userRole === 'superadmin') return false;
-  return getEffectiveLockedMonths(kpi).includes(month);
+function isMonthLockedForUser(_kpi, _month, _userRole) {
+  return false;
 }
 
-/** Gabungkan monthly_data baru; bulan terkunci dipertahankan dari data lama */
-function mergeMonthlyDataRespectingLock(existingKpi, incomingMonthlyData, userRole) {
+/** Gabungkan monthly_data baru (tanpa kunci bulan) */
+function mergeMonthlyDataRespectingLock(existingKpi, incomingMonthlyData, _userRole) {
   const existing = parseMonthlyData(existingKpi.monthly_data);
   const incoming = incomingMonthlyData || {};
-  const locked = getEffectiveLockedMonths(existingKpi);
-  const merged = { ...existing, ...incoming };
+  return { ...existing, ...incoming };
+}
 
-  if (userRole === 'admin' || userRole === 'superadmin') {
-    return merged;
-  }
-
-  locked.forEach((month) => {
-    if (existing[month] !== undefined) {
-      merged[month] = existing[month];
-    }
-  });
-
-  return merged;
+function mergeMonthlyTarget(existingKpi, incomingMonthlyTarget) {
+  const existing = parseMonthlyData(existingKpi.monthly_target);
+  const incoming = incomingMonthlyTarget || {};
+  return { ...existing, ...incoming };
 }
 
 module.exports = {
   MONTHS,
   parseLockedMonths,
   buildLockedMonthsFromData,
+  IMPORTED_REALISASI_MONTHS,
   getEffectiveLockedMonths,
   isMonthLockedForUser,
   mergeMonthlyDataRespectingLock,
+  mergeMonthlyTarget,
 };

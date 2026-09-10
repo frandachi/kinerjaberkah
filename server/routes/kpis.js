@@ -7,7 +7,11 @@ const { getGapSummary, getGapList, inferLevelUnit } = require('../lib/kpi-gap-ut
 const { buildKpiRecords, getTemplateKpis } = require('../lib/kpi-template-engine');
 const { computeKpiYtdScores, computeYtdActual, normalizeUnit } = require('../lib/kpi-scoring');
 const { buildJabatanUnitScope } = require('../lib/kpi-scope');
-const { mergeMonthlyDataRespectingLock, parseLockedMonths } = require('../lib/kpi-realisasi-lock');
+const {
+  mergeMonthlyDataRespectingLock,
+  mergeMonthlyTarget,
+  parseLockedMonths,
+} = require('../lib/kpi-realisasi-lock');
 const {
   setupMasterKpiFin01,
   setupAllMasterKpis,
@@ -555,7 +559,7 @@ router.put('/bulk/sort', authenticateToken, authorizeRole('superadmin', 'admin')
 router.put('/:id/realisasi', authenticateToken, auditMiddleware('UPDATE_KPI_REALISASI'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { monthly_data: incomingMonthly } = req.body;
+    const { monthly_data: incomingMonthly, monthly_target: incomingTarget } = req.body;
 
     const [rows] = await db.query('SELECT * FROM kpis WHERE id = ?', [id]);
     if (rows.length === 0) {
@@ -568,16 +572,29 @@ router.put('/:id/realisasi', authenticateToken, auditMiddleware('UPDATE_KPI_REAL
       if (req.user.jabatan !== existing.jabatan || req.user.unit_name !== existing.unit_name) {
         return res.status(403).json({ message: 'Anda hanya bisa mengisi realisasi KPI Anda sendiri' });
       }
-      // is_locked / Approved tidak memblokir isi realisasi bulan baru — hanya monthly_data_locked per bulan
+      // Input realisasi & target bulanan dibuka untuk semua user (tidak diblokir monthly_data_locked)
     }
 
     const mergedMonthly = mergeMonthlyDataRespectingLock(existing, incomingMonthly || {}, req.user.role);
+    const mergedTarget = incomingTarget
+      ? mergeMonthlyTarget(existing, incomingTarget)
+      : (existing.monthly_target || {});
     const unitType = normalizeUnit(existing.unit);
     const actual = computeYtdActual(unitType, mergedMonthly);
 
+    // Hitung target tahunan sederhana dari monthly_target bila tersedia
+    const targetValues = Object.values(mergedTarget || {})
+      .map((v) => parseFloat(v))
+      .filter((v) => !Number.isNaN(v));
+    const yearlyTarget = targetValues.length
+      ? (unitType === 'percentage' || unitType === 'score'
+          ? targetValues[targetValues.length - 1]
+          : targetValues.reduce((a, b) => a + b, 0))
+      : existing.target;
+
     await db.query(
-      'UPDATE kpis SET monthly_data = ?, actual = ? WHERE id = ?',
-      [JSON.stringify(mergedMonthly), actual, id]
+      'UPDATE kpis SET monthly_data = ?, monthly_target = ?, actual = ?, target = ? WHERE id = ?',
+      [JSON.stringify(mergedMonthly), JSON.stringify(mergedTarget), actual, yearlyTarget, id]
     );
 
     try { await reaggregateIfChildOrMaster(db, id); } catch (e) { console.warn('master reaggregate after realisasi:', e.message); }
