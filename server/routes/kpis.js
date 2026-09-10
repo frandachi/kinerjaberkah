@@ -332,9 +332,15 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
-router.post('/', authenticateToken, authorizeRole('superadmin', 'admin'), auditMiddleware('CREATE_KPI'), async (req, res) => {
+router.post('/', authenticateToken, authorizeRole('superadmin', 'admin', 'user'), auditMiddleware('CREATE_KPI'), async (req, res) => {
   try {
-    const kpi = req.body;
+    const kpi = { ...req.body };
+    // Pegawai hanya boleh membuat KPI untuk jabatan/unit sendiri
+    if (req.user.role === 'user') {
+      kpi.jabatan = req.user.jabatan;
+      kpi.unit_name = req.user.unit_name;
+      kpi.unit_type = 'pegawai';
+    }
     if (!kpi.name || !String(kpi.name).trim()) {
       return res.status(400).json({ message: 'Nama KPI wajib diisi' });
     }
@@ -352,10 +358,10 @@ router.post('/', authenticateToken, authorizeRole('superadmin', 'admin'), auditM
     const masterCode = await resolveMasterCodeForName(db, kpi.name);
 
     await db.query(
-      'INSERT INTO kpis (id, kpi_code, name, perspective, unit, polarity, target, actual, weight, unit_name, jabatan, strategy_id, monthly_data, unit_type, parent_kpi_id, status, description, formula, objective) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO kpis (id, kpi_code, name, perspective, unit, polarity, target, actual, weight, unit_name, jabatan, strategy_id, monthly_data, monthly_target, unit_type, parent_kpi_id, status, description, formula, objective) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         id, masterCode, kpi.name, kpi.perspective, kpi.unit, kpi.polarity || 'maximize', kpi.target || 0, kpi.actual || 0, kpi.weight || 0,
-        kpi.unit_name, kpi.jabatan, kpi.strategy_id, JSON.stringify(kpi.monthly_data || {}),
+        kpi.unit_name, kpi.jabatan, kpi.strategy_id, JSON.stringify(kpi.monthly_data || {}), JSON.stringify(kpi.monthly_target || {}),
         kpi.unit_type || 'pegawai', masterCode, kpi.status || 'Draft', kpi.description || null, kpi.formula || null, kpi.objective || null
       ]
     );

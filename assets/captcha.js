@@ -21,14 +21,35 @@
   }
 
   async function loadCaptcha() {
-    const res = await window.__kbNativeFetch(`${API}/auth/captcha`, { method: 'GET' });
-    const data = await res.json();
-    state.id = data.id;
-    state.image = data.image;
     const img = document.getElementById('kb-captcha-img');
     const input = document.getElementById('kb-captcha-input');
-    if (img) img.src = data.image;
-    if (input) input.value = '';
+    try {
+      const res = await window.__kbNativeFetch(`${API}/auth/captcha`, { method: 'GET' });
+      if (!res.ok) throw new Error('captcha http ' + res.status);
+      const data = await res.json();
+      if (!data || !data.image) throw new Error('captcha empty');
+      state.id = data.id;
+      state.image = data.image;
+      if (img) {
+        img.removeAttribute('alt');
+        img.alt = '';
+        img.src = data.image;
+      }
+      if (input) input.value = '';
+    } catch (err) {
+      state.id = '';
+      state.image = '';
+      if (img) {
+        img.removeAttribute('src');
+        img.alt = '';
+        img.style.display = 'flex';
+        img.style.alignItems = 'center';
+        img.style.justifyContent = 'center';
+        img.style.fontSize = '11px';
+        img.style.color = '#64748b';
+      }
+      console.warn('Gagal memuat captcha:', err && err.message);
+    }
   }
 
   function currentAnswer() {
@@ -85,7 +106,7 @@
         <div class="kb-captcha-label">Keamanan</div>
         <div class="kb-captcha-row">
           <input id="kb-captcha-input" class="kb-captcha-input" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCDE" />
-          <img id="kb-captcha-img" class="kb-captcha-img" alt="Captcha" />
+          <img id="kb-captcha-img" class="kb-captcha-img" alt="" />
           <button type="button" class="kb-captcha-refresh" id="kb-captcha-refresh" title="Muat ulang" aria-label="Muat ulang captcha">↻</button>
         </div>
       `;

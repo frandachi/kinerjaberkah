@@ -72,7 +72,7 @@ function createCaptcha() {
   const svg = svgCaptcha(text);
   return {
     id,
-    image: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`,
+    image: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
   };
 }
 
