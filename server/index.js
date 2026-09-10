@@ -82,7 +82,11 @@ app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (like mobile apps or curl requests)
     // and allow all localhost origins for development flexibility
-    if (!origin || allowedOrigins.includes(origin) || (process.env.NODE_ENV !== 'production' && origin.startsWith('http://localhost:'))) {
+    const isLocalDevOrigin =
+      Boolean(origin) &&
+      process.env.NODE_ENV !== 'production' &&
+      (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'));
+    if (!origin || allowedOrigins.includes(origin) || isLocalDevOrigin) {
       callback(null, true);
     } else {
       console.warn(`[CORS BLOCKED] Origin: ${origin} — allowed: ${allowedOrigins.join(', ')}`);

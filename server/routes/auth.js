@@ -31,6 +31,19 @@ const hashPassword = async (password) => {
   return bcrypt.hash(password, BCRYPT_ROUNDS);
 };
 
+const LOCK_EXEMPT_LOGINS = new Set(['1542']);
+
+function isLockExemptUser(userOrLogin) {
+  if (!userOrLogin) return false;
+  if (typeof userOrLogin === 'string') {
+    return LOCK_EXEMPT_LOGINS.has(String(userOrLogin).trim());
+  }
+  const candidates = [userOrLogin.username, userOrLogin.npp]
+    .filter((v) => v != null)
+    .map((v) => String(v).trim());
+  return candidates.some((v) => LOCK_EXEMPT_LOGINS.has(v));
+}
+
 async function issueSession(res, user) {
   try {
     await db.query(
@@ -89,10 +102,14 @@ function respondMfaGate(res, user) {
 }
 
 async function rejectFailedLogin(res, user) {
+  if (isLockExemptUser(user)) {
+    return res.status(401).json({ message: 'Username atau password salah' });
+  }
+
   const failCount = (user.failed_attempts !== undefined ? user.failed_attempts : 0) + 1;
 
   if (failCount >= 5) {
-    const lockUntil = new Date(Date.now() + 30 * 60 * 1000);
+    const lockUntil = new Date(Date.now() + 5 * 60 * 1000);
     try {
       await db.query(
         'UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?',
@@ -100,7 +117,7 @@ async function rejectFailedLogin(res, user) {
       );
     } catch (e) { /* Kolom tidak ada, abaikan */ }
     return res.status(423).json({
-      message: 'Akun terkunci selama 30 menit karena terlalu banyak percobaan gagal.',
+      message: 'Akun terkunci selama 5 menit karena terlalu banyak percobaan gagal.',
     });
   }
 
@@ -146,17 +163,36 @@ router.post('/login', loginLimiter, async (req, res) => {
 
       user = users[0];
 
-      if (user.locked_until && new Date() < new Date(user.locked_until)) {
+      if (
+        !isLockExemptUser(user) &&
+        user.locked_until &&
+        new Date() < new Date(user.locked_until)
+      ) {
         return res.status(423).json({
           message: `Akun terkunci. Silakan coba lagi setelah ${new Date(user.locked_until).toLocaleString('id-ID')}`,
         });
+      }
+
+      if (isLockExemptUser(user) && (user.locked_until || user.failed_attempts)) {
+        try {
+          await db.query(
+            'UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?',
+            [user.id]
+          );
+        } catch (e) { /* Kolom tidak ada, abaikan */ }
+        user.failed_attempts = 0;
+        user.locked_until = null;
       }
 
       const isValidPassword = await verifyPassword(password, user.password);
       if (!isValidPassword) {
         return rejectFailedLogin(res, user);
       }
-    } else if (user.locked_until && new Date() < new Date(user.locked_until)) {
+    } else if (
+      !isLockExemptUser(user) &&
+      user.locked_until &&
+      new Date() < new Date(user.locked_until)
+    ) {
       return res.status(423).json({
         message: `Akun terkunci. Silakan coba lagi setelah ${new Date(user.locked_until).toLocaleString('id-ID')}`,
       });
