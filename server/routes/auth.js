@@ -265,7 +265,12 @@ router.post('/login/mfa-setup', loginLimiter, async (req, res) => {
       return res.status(401).json({ message: 'Sesi MFA berakhir. Silakan login ulang.' });
     }
     console.error('MFA setup error:', error.message);
-    res.status(500).json({ message: 'Gagal menyiapkan MFA. Jalankan migrasi 005_mfa_required.sql' });
+    const hint = /qrcode/i.test(error.message || '')
+      ? 'Pasang dependency: npm install qrcode (di folder server).'
+      : /Unknown column|ER_BAD_FIELD/i.test(error.message || '')
+        ? 'Jalankan migrasi 005_mfa_required.sql'
+        : 'Cek log server (MFA setup error).';
+    res.status(500).json({ message: `Gagal menyiapkan MFA. ${hint}` });
   }
 });
 

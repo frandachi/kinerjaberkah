@@ -729,6 +729,15 @@ router.delete('/:id', authenticateToken, authorizeRole('superadmin', 'admin'), a
   }
 });
 
+function pickApprovalStatus(statuses) {
+  const list = (statuses || []).map((s) => String(s || 'Draft'));
+  const has = (re) => list.some((s) => re.test(s));
+  if (has(/^(submitted|menunggu|pending)$/i)) return 'Submitted';
+  if (has(/^approved$/i)) return 'Approved';
+  if (has(/^rejected$/i)) return 'Rejected';
+  return list[0] || 'Draft';
+}
+
 router.post('/submit', authenticateToken, auditMiddleware('SUBMIT_KPI'), async (req, res) => {
   try {
     const { jabatan, unit_name } = req.body;
@@ -742,8 +751,9 @@ router.post('/submit', authenticateToken, auditMiddleware('SUBMIT_KPI'), async (
     }
 
     const scope = await buildJabatanUnitScope(db, jabatan, unit_name);
+    // Tandai pengajuan; approved_at dipakai UI sebagai tanggal pengajuan bila submitted_at belum ada
     await db.query(
-      `UPDATE kpis SET status = ? WHERE ${scope.where}`,
+      `UPDATE kpis SET status = ?, approved_by = NULL, approved_at = NOW() WHERE ${scope.where}`,
       ['Submitted', ...scope.params]
     );
 
@@ -762,8 +772,10 @@ router.get('/approval-list', authenticateToken, async (req, res) => {
     let subordinates = [];
     const unitNameQuery = req.query.unit_name;
     const jabatanQuery = req.query.jabatan;
+    // Admin & superadmin melihat semua pengajuan workflow; pimpinan lain hanya bawahan langsung
+    const seeAllPending = role === 'superadmin' || role === 'admin';
 
-    if (role === 'superadmin') {
+    if (seeAllPending) {
       let queryStr = 'SELECT name, npp, jabatan, unit_name, supervisi_approval FROM users WHERE role != "superadmin"';
       let queryParams = [];
 
@@ -777,7 +789,7 @@ router.get('/approval-list', authenticateToken, async (req, res) => {
         queryParams.push(jabatanQuery);
       }
 
-      // Tanpa filter: batasi ke user yang punya KPI berstatus approval (hindari scan semua pegawai)
+      // Tanpa filter unit/jabatan: hanya user yang punya KPI di alur approval
       if (!unitNameQuery && !jabatanQuery) {
         queryStr += ` AND (jabatan, unit_name) IN (
           SELECT DISTINCT jabatan, unit_name FROM kpis
@@ -785,12 +797,12 @@ router.get('/approval-list', authenticateToken, async (req, res) => {
         )`;
       }
 
-      const [superadminSubordinates] = await db.query(queryStr, queryParams);
-      subordinates = superadminSubordinates;
+      const [allSubs] = await db.query(queryStr, queryParams);
+      subordinates = allSubs;
     } else {
       const [directSubordinates] = await db.query(
-        'SELECT name, npp, jabatan, unit_name, supervisi_approval FROM users WHERE supervisi_approval = ?',
-        [pimpinanName]
+        'SELECT name, npp, jabatan, unit_name, supervisi_approval FROM users WHERE supervisi_approval = ? OR supervisi_approval = ?',
+        [pimpinanName, req.user.npp || pimpinanName]
       );
       subordinates = directSubordinates;
     }
@@ -809,7 +821,7 @@ router.get('/approval-list', authenticateToken, async (req, res) => {
     const queryParams = jabatanUnitPairs.flat();
 
     const [kpiRows] = await db.query(
-      `SELECT status, actual, target, weight, manual_indeks, jabatan, unit_name, unit, monthly_data, monthly_target FROM kpis WHERE ${placeholders}`,
+      `SELECT status, actual, target, weight, manual_indeks, jabatan, unit_name, unit, monthly_data, monthly_target, approved_at, created_at FROM kpis WHERE ${placeholders}`,
       queryParams
     );
 
@@ -826,20 +838,26 @@ router.get('/approval-list', authenticateToken, async (req, res) => {
       const kpis = kpisMap[key] || [];
 
       if (kpis.length > 0) {
-        const status = kpis[0].status || 'Draft';
+        const status = pickApprovalStatus(kpis.map((k) => k.status));
         let totalBobot = 0;
         let totalHasil = 0;
+        let submittedAt = null;
 
         kpis.forEach(kpi => {
           const { hasil } = computeKpiYtdScores(kpi);
           const weight = parseFloat(kpi.weight) || 0;
           totalBobot += weight;
           totalHasil += hasil;
+          const ts = kpi.approved_at || kpi.created_at;
+          if (ts && (!submittedAt || new Date(ts) > new Date(submittedAt))) {
+            submittedAt = ts;
+          }
         });
 
         results.push({
           ...sub,
           status,
+          submitted_at: submittedAt,
           total_kpi: kpis.length,
           total_bobot: totalBobot,
           total_hasil: totalHasil
@@ -848,6 +866,7 @@ router.get('/approval-list', authenticateToken, async (req, res) => {
         results.push({
           ...sub,
           status: 'Belum Ada KPI',
+          submitted_at: null,
           total_kpi: 0,
           total_bobot: 0,
           total_hasil: 0
@@ -855,7 +874,8 @@ router.get('/approval-list', authenticateToken, async (req, res) => {
       }
     }
 
-    res.json(results);
+    // Tab "Menunggu" hanya relevan untuk yang sudah diajukan / diputuskan
+    res.json(results.filter((r) => r.status !== 'Belum Ada KPI' && r.status !== 'Draft'));
   } catch (error) {
     console.error('Approval list error:', error.message);
     res.status(500).json({ message: 'Terjadi kesalahan pada server' });
