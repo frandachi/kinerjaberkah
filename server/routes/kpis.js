@@ -882,6 +882,51 @@ router.get('/approval-list', authenticateToken, async (req, res) => {
   }
 });
 
+/** Detail perubahan KPI per jabatan+unit untuk dialog Approval */
+router.get('/approval-detail', authenticateToken, async (req, res) => {
+  try {
+    const jabatan = (req.query.jabatan || '').trim();
+    const unitName = (req.query.unit_name || '').trim();
+    if (!jabatan || !unitName) {
+      return res.status(400).json({ message: 'jabatan dan unit_name wajib diisi' });
+    }
+
+    const role = req.user.role;
+    if (role !== 'superadmin' && role !== 'admin') {
+      const [allowed] = await db.query(
+        `SELECT 1 AS ok FROM users
+         WHERE jabatan = ? AND unit_name = ?
+           AND (supervisi_approval = ? OR supervisi_approval = ?)
+         LIMIT 1`,
+        [jabatan, unitName, req.user.name, req.user.npp || req.user.name]
+      );
+      if (!allowed.length) {
+        return res.status(403).json({ message: 'Anda tidak berhak melihat pengajuan ini' });
+      }
+    }
+
+    const [rows] = await db.query(
+      `SELECT id, name, perspective, unit, polarity, weight, target, actual, status,
+              monthly_data, monthly_target, notes, approved_at, created_at, unit_name, jabatan
+       FROM kpis
+       WHERE jabatan = ? AND unit_name = ? AND COALESCE(unit_type, '') <> 'master'
+       ORDER BY perspective, name`,
+      [jabatan, unitName]
+    );
+
+    const items = rows.map((row) => {
+      const kpi = parseKpiJsonFields(row);
+      const { pencapaian, hasil, indeks } = computeKpiYtdScores(kpi);
+      return { ...kpi, pencapaian, hasil, indeks };
+    });
+
+    res.json(items);
+  } catch (error) {
+    console.error('Approval detail error:', error.message);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+  }
+});
+
 router.post('/approve', authenticateToken, authorizeRole('superadmin', 'admin'), auditMiddleware('APPROVE_KPI'), async (req, res) => {
   try {
     const { jabatan, unit_name, action } = req.body;

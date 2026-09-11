@@ -51,12 +51,24 @@ router.get('/', authenticateToken, async (req, res) => {
     const queryParams = [];
 
     if (req.user.role === 'user') {
-      const [users] = await db.query('SELECT pegawai_id FROM users WHERE id = ? LIMIT 1', [req.user.id]);
-      if (!users[0]?.pegawai_id) {
+      const [users] = await db.query(
+        'SELECT pegawai_id, npp, jabatan, unit_name, name FROM users WHERE id = ? LIMIT 1',
+        [req.user.id]
+      );
+      const me = users[0] || {};
+      if (me.pegawai_id) {
+        whereParts.push('id = ?');
+        queryParams.push(me.pegawai_id);
+      } else if (me.npp) {
+        // Fallback: user tanpa pegawai_id tetap bisa load data diri via NPP
+        whereParts.push('npp = ?');
+        queryParams.push(me.npp);
+      } else if (me.jabatan && me.unit_name) {
+        whereParts.push('jabatan = ? AND unit_name = ?');
+        queryParams.push(me.jabatan, me.unit_name);
+      } else {
         return res.json(isPaginated ? { data: [], total: 0, page: 1, limit: 100, totalPages: 1 } : []);
       }
-      whereParts.push('id = ?');
-      queryParams.push(users[0].pegawai_id);
     }
 
     if (search) {
