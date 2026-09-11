@@ -298,7 +298,17 @@ router.get('/', authenticateToken, async (req, res) => {
 
     let whereClauses = [];
 
-    if (req.user.role === 'user') {
+    if (req.query.scope === 'parent-cascade') {
+      // Opsi KPI Induk untuk form cascading (boleh diakses role user)
+      whereClauses.push(
+        "unit_type IN ('corporate','divisi','bidang','kck','kc','kcp','unit_kp')"
+      );
+      if (req.user.role === 'user') {
+        // Unit sendiri (semua level atas) + KPI corporate bank-wide
+        whereClauses.push('(unit_name = ? OR unit_type = ?)');
+        queryParams.push(req.user.unit_name || '', 'corporate');
+      }
+    } else if (req.user.role === 'user') {
       // Pemimpin Cabang + scope=unit-office: seluruh KPI di unit kantor (unit + anggota)
       if (req.query.scope === 'unit-office' && isPemimpinCabangJabatan(req.user.jabatan)) {
         whereClauses.push('unit_name = ?');

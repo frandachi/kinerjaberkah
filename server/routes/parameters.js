@@ -5,8 +5,8 @@ const authorizeRole = require('../middleware/authorize');
 
 const router = express.Router();
 
-const createCrudRoutes = (tableName) => {
-  router.get(`/${tableName}`, authenticateToken, authorizeRole('superadmin', 'admin'), async (req, res) => {
+const createCrudRoutes = (tableName, { readRoles = ['superadmin', 'admin'] } = {}) => {
+  router.get(`/${tableName}`, authenticateToken, authorizeRole(...readRoles), async (req, res) => {
     try {
       const [rows] = await db.query(`SELECT * FROM ${tableName} ORDER BY created_at ASC`);
       res.json(rows);
@@ -51,12 +51,12 @@ const createCrudRoutes = (tableName) => {
   });
 };
 
-createCrudRoutes('satuans');
-createCrudRoutes('targets');
+createCrudRoutes('satuans', { readRoles: ['superadmin', 'admin', 'user'] });
+createCrudRoutes('targets', { readRoles: ['superadmin', 'admin', 'user'] });
 
 // objectives has its own shape (perspective/description/divisi), so it gets
 // dedicated handlers instead of the generic name-only createCrudRoutes helper.
-router.get('/objectives', authenticateToken, authorizeRole('superadmin', 'admin'), async (req, res) => {
+router.get('/objectives', authenticateToken, authorizeRole('superadmin', 'admin', 'user'), async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM objectives ORDER BY created_at ASC');
     res.json(rows);
@@ -105,7 +105,7 @@ router.delete('/objectives/:id', authenticateToken, authorizeRole('superadmin'),
   }
 });
 
-router.get('/strategies', authenticateToken, authorizeRole('superadmin', 'admin'), async (req, res) => {
+router.get('/strategies', authenticateToken, authorizeRole('superadmin', 'admin', 'user'), async (req, res) => {
   try {
     const [rows] = await db.query(`
       SELECT s.*, o.name as objective_name, o.divisi as objective_divisi
