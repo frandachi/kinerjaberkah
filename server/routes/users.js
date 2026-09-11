@@ -4,6 +4,7 @@ const db = require('../db');
 const authenticateToken = require('../middleware/auth');
 const authorizeRole = require('../middleware/authorize');
 const { auditMiddleware } = require('../middleware/audit');
+const { planAtasanSync } = require('../lib/atasanLangsung');
 
 const router = express.Router();
 const BCRYPT_ROUNDS = 12;
@@ -313,15 +314,50 @@ router.delete('/:id', authenticateToken, authorizeRole('superadmin'), auditMiddl
   }
 });
 
-router.post('/update-supervisor', authenticateToken, authorizeRole('superadmin'), auditMiddleware('UPDATE_SUPERVISOR'), async (req, res) => {
+
+router.post('/sync-atasan-langsung', authenticateToken, authorizeRole('superadmin', 'admin'), auditMiddleware('SYNC_ATASAN_LANGSUNG'), async (req, res) => {
+  try {
+    const onlyEmpty = !!(req.body && req.body.onlyEmpty);
+    const dryRun = !!(req.body && req.body.dryRun);
+    const [users] = await db.query(
+      'SELECT id, name, npp, jabatan, unit_name, supervisi_approval FROM users WHERE role != ?',
+      ['superadmin']
+    );
+    const { updates, unresolved, skipped } = planAtasanSync(users, { onlyEmpty });
+
+    if (!dryRun && updates.length > 0) {
+      for (const row of updates) {
+        await db.query('UPDATE users SET supervisi_approval = ? WHERE id = ?', [row.to, row.id]);
+      }
+    }
+
+    res.json({
+      message: dryRun
+        ? 'Preview pemetaan atasan dari struktur organisasi'
+        : 'Atasan langsung disesuaikan dari struktur organisasi',
+      dryRun,
+      onlyEmpty,
+      updated: dryRun ? 0 : updates.length,
+      planned: updates.length,
+      unresolved,
+      skipped,
+      samples: updates.slice(0, 20),
+    });
+  } catch (error) {
+    console.error('Sync atasan langsung error:', error.message);
+    res.status(500).json({ message: 'Gagal menyesuaikan atasan langsung' });
+  }
+});
+
+router.post('/update-supervisor', authenticateToken, authorizeRole('superadmin', 'admin'), auditMiddleware('UPDATE_SUPERVISOR'), async (req, res) => {
   try {
     const { npp, supervisi_approval } = req.body;
 
-    if (!npp || !supervisi_approval) {
-      return res.status(400).json({ message: 'NPP dan supervisor wajib diisi' });
+    if (!npp) {
+      return res.status(400).json({ message: 'NPP wajib diisi' });
     }
 
-    await db.query('UPDATE users SET supervisi_approval = ? WHERE npp = ?', [supervisi_approval, npp]);
+    await db.query('UPDATE users SET supervisi_approval = ? WHERE npp = ?', [supervisi_approval || '', npp]);
 
     res.json({ message: 'Supervisor berhasil diperbarui' });
   } catch (error) {
