@@ -1,1 +1,39 @@
-const f=[{value:"maximize",label:"Maximize (More is better)",shortLabel:"Maximize",formula:"Pencapaian = (Realisasi ÷ Target) × 100%"},{value:"minimize",label:"Minimize (Less is better)",shortLabel:"Minimize",formula:"Pencapaian = (Target ÷ Realisasi) × 100%"},{value:"faster",label:"Faster (Time-based)",shortLabel:"Faster",formula:"Pencapaian = (Target waktu ÷ Realisasi waktu) × 100%"},{value:"range",label:"Range (90%–110% = 100%)",shortLabel:"Range",formula:"BB ≤ Realisasi ≤ BA → 100%; di luar range proporsional"}];function c(t){const i=(t||"maximize").toString().trim().toLowerCase();return["maximize","minimize","faster","range"].includes(i)?i:"maximize"}function b(t,i,l="maximize",s={}){const a=parseFloat(t),e=parseFloat(i);if(Number.isNaN(e)||e<=0||Number.isNaN(a))return 0;const n=c(l),m=s.lowerRatio??.9,u=s.upperRatio??1.1;if(n==="minimize"||n==="faster")return a<=0?0:e/a*100;if(n==="range"){const r=e*m,o=e*u;return a>=r&&a<=o?100:a<r?r>0?a/r*100:0:a>0?o/a*100:0}return a<=0?0:a/e*100}export{f as P,b as c,c as n};
+const f = [
+  { value: 'maximize', label: 'Maximize (More is better)', shortLabel: 'Maximize', formula: 'Pencapaian = (Realisasi ÷ Target) × 100%' },
+  { value: 'minimize', label: 'Minimize (Less is better)', shortLabel: 'Minimize', formula: 'Pencapaian = (Target ÷ Realisasi) × 100%' },
+  { value: 'faster', label: 'Faster (Time-based)', shortLabel: 'Faster', formula: 'Pencapaian = (Target waktu ÷ Realisasi waktu) × 100%' },
+  { value: 'range', label: 'Range (90%–110% = 100%)', shortLabel: 'Range', formula: 'BB ≤ Realisasi ≤ BA → 100%; di luar range proporsional' },
+];
+
+function c(t) {
+  const i = (t || 'maximize').toString().trim().toLowerCase();
+  return ['maximize', 'minimize', 'faster', 'range'].includes(i) ? i : 'maximize';
+}
+
+function b(t, i, l = 'maximize', s = {}) {
+  const a = parseFloat(t);
+  const e = parseFloat(i);
+  if (Number.isNaN(a) || Number.isNaN(e)) return 0;
+  const n = c(l);
+  const m = s.lowerRatio ?? 0.9;
+  const u = s.upperRatio ?? 1.1;
+  if (e === 0) {
+    if (a === 0) return 100;
+    if (n === 'minimize' || n === 'faster') return 0;
+    return 100;
+  }
+  if (n === 'minimize' || n === 'faster') {
+    if (a === 0) return 100;
+    return (e / a) * 100;
+  }
+  if (n === 'range') {
+    const r = e * m;
+    const o = e * u;
+    if (a >= r && a <= o) return 100;
+    if (a < r) return r !== 0 ? (a / r) * 100 : a === 0 ? 100 : 0;
+    return a !== 0 ? (o / a) * 100 : 0;
+  }
+  return (a / e) * 100;
+}
+
+export { f as P, b as c, c as n };

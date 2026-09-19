@@ -1,12 +1,35 @@
+DirectoryIndex index.html index.php
+
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /kinerjaberkah/
-  
+
   RewriteCond %{REQUEST_URI} ^/kinerjaberkah/api [NC]
   RewriteRule ^ - [L]
+
+  RewriteRule \.(?:js|mjs|css|map|png|jpe?g|gif|svg|ico|woff2?|ttf|eot|webp|json)$ - [L]
 
   RewriteRule ^index\.html$ - [L]
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule . /kinerjaberkah/index.html [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+  <FilesMatch "^(index\.html|boot-.*\.js)$">
+    Header unset ETag
+    Header always set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+    Header always set Pragma "no-cache"
+    Header always set Expires "0"
+  </FilesMatch>
+  # File index-CdyJlLv*.js adalah shim/alias yang isinya bisa berubah tanpa ganti nama:
+  # wajib revalidasi setiap load (ETag -> 304) agar tidak ada 2 salinan modul index.
+  <FilesMatch "^index-CdyJlLv[A-Za-z]+\.js$">
+    Header always set Cache-Control "no-cache, must-revalidate, max-age=0"
+    Header unset Expires
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/css application/javascript application/json image/svg+xml
 </IfModule>

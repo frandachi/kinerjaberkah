@@ -1,4 +1,5 @@
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
+const { monthKeysInclusive } = require('./kpi-scoring');
 
 function parseLockedMonths(raw) {
   if (!raw) return [];
@@ -35,29 +36,98 @@ function parseMonthlyData(raw) {
   }
 }
 
-/**
- * Input realisasi/target dibuka untuk semua role.
- * monthly_data_locked dipertahankan di DB untuk audit, tapi tidak lagi memblokir input.
- */
-function getEffectiveLockedMonths(_kpi) {
+function parseJsonArr(value) {
+  if (Array.isArray(value)) return value;
+  if (value == null || value === '') return [];
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
   return [];
 }
 
-function isMonthLockedForUser(_kpi, _month, _userRole) {
-  return false;
+function idsInclude(ids, kpiId) {
+  const needle = String(kpiId);
+  return parseJsonArr(ids).some((id) => String(id) === needle);
 }
 
-/** Gabungkan monthly_data baru (tanpa kunci bulan) */
-function mergeMonthlyDataRespectingLock(existingKpi, incomingMonthlyData, _userRole) {
+/**
+ * Untuk KPI yang terkait mutasi aktif, hanya bulan di periode scorecard
+ * (lama / baru) yang boleh diubah.
+ * Return null = tidak ada batasan mutasi.
+ *
+ * Matching by KPI id in old_kpi_ids / new_kpi_ids only — jangan kunci
+ * semua KPI yang kebetulan unit+jabatan sama (false lock untuk rekan).
+ */
+async function getMutationAllowedMonths(db, kpi) {
+  if (!db || !kpi || kpi.id == null) return null;
+
+  try {
+    const [rows] = await db.query(
+      `SELECT old_kpi_ids, new_kpi_ids, old_period_start, old_period_end,
+              new_period_start, new_period_end
+       FROM mutation_history
+       WHERE status = 'active'
+       ORDER BY effective_date DESC, id DESC`
+    );
+    if (!rows.length) return null;
+
+    for (const m of rows) {
+      if (idsInclude(m.old_kpi_ids, kpi.id)) {
+        return monthKeysInclusive(m.old_period_start, m.old_period_end);
+      }
+      if (idsInclude(m.new_kpi_ids, kpi.id)) {
+        // Buka semua bulan periode setelah mutasi (tidak di-clamp ke hari ini)
+        return monthKeysInclusive(m.new_period_start, m.new_period_end);
+      }
+    }
+    return null;
+  } catch (err) {
+    console.warn('getMutationAllowedMonths:', err.message);
+    return null;
+  }
+}
+
+function getEffectiveLockedMonths(kpi, mutationAllowedMonths = null) {
+  // Bulan di luar periode mutasi dianggap terkunci
+  if (Array.isArray(mutationAllowedMonths) && mutationAllowedMonths.length) {
+    const allow = new Set(mutationAllowedMonths);
+    return MONTHS.filter((m) => !allow.has(m));
+  }
+  return [];
+}
+
+function isMonthLockedForUser(kpi, month, _userRole, mutationAllowedMonths = null) {
+  const locked = getEffectiveLockedMonths(kpi, mutationAllowedMonths);
+  return locked.includes(month);
+}
+
+/** Gabungkan monthly_data; bulan terkunci (di luar periode mutasi) tidak diubah */
+function mergeMonthlyDataRespectingLock(existingKpi, incomingMonthlyData, _userRole, mutationAllowedMonths = null) {
   const existing = parseMonthlyData(existingKpi.monthly_data);
   const incoming = incomingMonthlyData || {};
-  return { ...existing, ...incoming };
+  const locked = new Set(getEffectiveLockedMonths(existingKpi, mutationAllowedMonths));
+  const out = { ...existing };
+  for (const [month, value] of Object.entries(incoming)) {
+    if (locked.has(month)) continue;
+    out[month] = value;
+  }
+  return out;
 }
 
-function mergeMonthlyTarget(existingKpi, incomingMonthlyTarget) {
+function mergeMonthlyTarget(existingKpi, incomingMonthlyTarget, mutationAllowedMonths = null) {
   const existing = parseMonthlyData(existingKpi.monthly_target);
   const incoming = incomingMonthlyTarget || {};
-  return { ...existing, ...incoming };
+  const locked = new Set(getEffectiveLockedMonths(existingKpi, mutationAllowedMonths));
+  const out = { ...existing };
+  for (const [month, value] of Object.entries(incoming)) {
+    if (locked.has(month)) continue;
+    out[month] = value;
+  }
+  return out;
 }
 
 module.exports = {
@@ -65,8 +135,10 @@ module.exports = {
   parseLockedMonths,
   buildLockedMonthsFromData,
   IMPORTED_REALISASI_MONTHS,
+  getMutationAllowedMonths,
   getEffectiveLockedMonths,
   isMonthLockedForUser,
   mergeMonthlyDataRespectingLock,
   mergeMonthlyTarget,
+  parseJsonArr,
 };

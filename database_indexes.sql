@@ -17,6 +17,10 @@ ALTER TABLE pegawai ADD INDEX idx_pegawai_unit (unit_name);
 -- Mempercepat filter KPI berdasarkan jabatan dan unit (terutama untuk login dengan Role User biasa)
 ALTER TABLE kpis ADD INDEX idx_kpi_jabatan_unit (jabatan, unit_name);
 ALTER TABLE kpis ADD INDEX idx_kpi_perspective (perspective);
+ALTER TABLE kpis ADD INDEX idx_kpi_unit_name (unit_name);
+ALTER TABLE kpis ADD INDEX idx_kpi_unit_type (unit_type);
+ALTER TABLE kpis ADD INDEX idx_kpi_unit_type_name (unit_type, unit_name);
+ALTER TABLE kpis ADD INDEX idx_kpi_sort (sort_order, created_at, id);
 
 -- 4. Index untuk Password History
 -- Mempercepat validasi saat User mengganti password (cek 5 password terakhir)

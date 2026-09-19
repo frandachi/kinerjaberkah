@@ -135,7 +135,7 @@ router.post('/login', loginLimiter, async (req, res) => {
   const { username, password, captchaId, captcha } = req.body;
 
   try {
-    if (!consumeCaptcha(captchaId, captcha)) {
+    if (!captchaId || !consumeCaptcha(captchaId, captcha)) {
       return res.status(400).json({ message: 'Captcha tidak valid. Silakan muat ulang gambar.' });
     }
 
@@ -198,7 +198,11 @@ router.post('/login', loginLimiter, async (req, res) => {
       });
     }
 
-    return respondMfaGate(res, user);
+    // MFA sementara dimatikan (set MFA_ENABLED=true di .env untuk mengaktifkan lagi)
+    if (String(process.env.MFA_ENABLED || '').toLowerCase() === 'true') {
+      return respondMfaGate(res, user);
+    }
+    return issueSession(res, user);
   } catch (error) {
     console.error('Login error:', error.message);
     res.status(500).json({ message: 'Terjadi kesalahan pada server' });

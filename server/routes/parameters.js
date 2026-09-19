@@ -5,6 +5,13 @@ const authorizeRole = require('../middleware/authorize');
 
 const router = express.Router();
 
+// Master data rarely changes within a session — short private cache
+router.use((req, res, next) => {
+  if (req.method === 'GET') res.setHeader('Cache-Control', 'private, max-age=60');
+  next();
+});
+
+
 const createCrudRoutes = (tableName, { readRoles = ['superadmin', 'admin'] } = {}) => {
   router.get(`/${tableName}`, authenticateToken, authorizeRole(...readRoles), async (req, res) => {
     try {

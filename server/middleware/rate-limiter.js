@@ -1,13 +1,8 @@
 const rateLimit = require('express-rate-limit');
 
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: { message: 'Terlalu banyak percobaan login. Silakan coba lagi dalam 15 menit.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => req.ip
-});
+// Login: no IP throttle — many users share one office NAT and hit this immediately.
+// Account lockout after failed passwords (auth.js) still applies per-user.
+const loginLimiter = (req, res, next) => next();
 
 const apiLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
@@ -27,7 +22,7 @@ const activateLimiter = rateLimit({
 
 const captchaLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
-  max: 40,
+  max: 120,
   message: { message: 'Terlalu banyak permintaan captcha. Silakan coba lagi nanti.' },
   standardHeaders: true,
   legacyHeaders: false,

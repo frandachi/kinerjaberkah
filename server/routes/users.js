@@ -366,4 +366,123 @@ router.post('/update-supervisor', authenticateToken, authorizeRole('superadmin',
   }
 });
 
+async function ensureRolePermissionsTable() {
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS role_permissions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        role_id VARCHAR(50) NOT NULL,
+        permissions JSON NOT NULL,
+        updated_by VARCHAR(100) NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_role_id (role_id)
+      )
+    `);
+  } catch (err) {
+    console.warn('ensureRolePermissionsTable error:', err.message);
+  }
+}
+ensureRolePermissionsTable().catch(() => {});
+
+router.get('/role-permissions', authenticateToken, async (req, res) => {
+  try {
+    await ensureRolePermissionsTable();
+    const [rows] = await db.query('SELECT role_id, permissions FROM role_permissions');
+    const merged = {};
+    for (const r of rows) {
+      let p = r.permissions;
+      if (typeof p === 'string') {
+        try { p = JSON.parse(p); } catch {}
+      }
+      if (p && typeof p === 'object') {
+        Object.assign(merged, p);
+      }
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ success: true, permissions: merged });
+  } catch (error) {
+    console.error('Get role-permissions error:', error.message);
+    res.status(500).json({ message: 'Gagal mengambil data kewenangan role', permissions: {} });
+  }
+});
+
+router.post(
+  '/role-permissions',
+  authenticateToken,
+  authorizeRole('superadmin'),
+  auditMiddleware('UPDATE_ROLE_PERMISSIONS'),
+  async (req, res) => {
+    try {
+      await ensureRolePermissionsTable();
+      const { permissions, role_id } = req.body;
+
+      if (!permissions || typeof permissions !== 'object') {
+        return res.status(400).json({ message: 'Format data kewenangan role tidak valid' });
+      }
+
+      // Kelompokkan per role_id (format key: ${role}::${module}::${action})
+      const roleBuckets = {};
+      for (const [key, val] of Object.entries(permissions)) {
+        const parts = key.split('::');
+        const rId = parts.length > 1 ? parts[0] : (role_id || 'custom');
+        if (!roleBuckets[rId]) roleBuckets[rId] = {};
+        roleBuckets[rId][key] = !!val;
+      }
+
+      if (role_id && !roleBuckets[role_id]) {
+        roleBuckets[role_id] = {};
+      }
+
+      for (const [rId, perms] of Object.entries(roleBuckets)) {
+        await db.query(
+          `INSERT INTO role_permissions (role_id, permissions, updated_by)
+           VALUES (?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             permissions = VALUES(permissions),
+             updated_by = VALUES(updated_by)`,
+          [rId, JSON.stringify(perms), req.user.username || req.user.id || 'superadmin']
+        );
+      }
+
+      res.json({
+        success: true,
+        message: 'Kewenangan role berhasil disimpan ke database',
+        permissions,
+      });
+    } catch (error) {
+      console.error('Save role-permissions error:', error.message);
+      res.status(500).json({ message: 'Gagal menyimpan kewenangan role: ' + error.message });
+    }
+  }
+);
+
+router.post(
+  '/role-permissions/reset',
+  authenticateToken,
+  authorizeRole('superadmin'),
+  auditMiddleware('RESET_ROLE_PERMISSIONS'),
+  async (req, res) => {
+    try {
+      await ensureRolePermissionsTable();
+      const { role_id } = req.body;
+
+      if (role_id && role_id !== 'all') {
+        await db.query('DELETE FROM role_permissions WHERE role_id = ?', [role_id]);
+      } else {
+        await db.query('DELETE FROM role_permissions');
+      }
+
+      res.json({
+        success: true,
+        message: role_id && role_id !== 'all'
+          ? `Kewenangan role ${role_id} berhasil direset ke pengaturan awal`
+          : 'Semua kewenangan role berhasil direset ke pengaturan awal',
+      });
+    } catch (error) {
+      console.error('Reset role-permissions error:', error.message);
+      res.status(500).json({ message: 'Gagal mereset kewenangan role' });
+    }
+  }
+);
+
 module.exports = router;

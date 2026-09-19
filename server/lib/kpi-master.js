@@ -37,10 +37,16 @@ function toNumber(value) {
   return Number.isFinite(n) ? n : null;
 }
 
-function normalizeNameKey(name) {
+function stripNameSymbols(name) {
   return String(name || '')
+    .replace(/^[\s#*•·\-–—]+/g, '')
+    .replace(/[\s#*•·]+$/g, '')
     .trim()
-    .replace(/^-\s*/, '')
+    .replace(/\s+/g, ' ');
+}
+
+function normalizeNameKey(name) {
+  return stripNameSymbols(name)
     .toLowerCase()
     .replace(/\s+/g, ' ');
 }
@@ -218,6 +224,44 @@ async function resolveMasterCodeForName(dbOrName, maybeName) {
   return keyToCode[key] || null;
 }
 
+/**
+ * Pastikan nama KPI punya kode master stabil (satu nama konsep = satu kode).
+ * Membuat entri master_kpis + baris parent bila belum ada.
+ */
+async function ensureMasterCodeForKpi(db, { name, perspective, unit, polarity } = {}) {
+  await ensureSchema(db);
+  const key = groupKeyForName(name);
+  if (!key) return null;
+
+  let code = await resolveMasterCodeForName(db, name);
+  const persp = normalizePerspectiveKey(perspective);
+  const displayName = key === 'laba bersih' ? RESERVED_CODES['KPI-FIN-01'].name : stripNameSymbols(name);
+
+  if (!code) {
+    const { byCode } = await loadCatalogFromDb(db);
+    const prefix = PERSPECTIVE_PREFIX[persp] || 'GEN';
+    let n = persp === 'financial' ? 2 : 1;
+    do {
+      code = `KPI-${prefix}-${padCode(n)}`;
+      n += 1;
+    } while (byCode[code]);
+  }
+
+  await ensureMasterParentRow(db, {
+    code,
+    name: displayName,
+    perspective: persp,
+    unit: unit || 'currency',
+    polarity: polarity || 'maximize',
+    matchNames: key === 'laba bersih' ? [displayName, stripNameSymbols(name)] : [displayName],
+    matchKeys: [key],
+    description: `Master KPI ${displayName} (${code}) — akumulasi seluruh unit/jabatan`,
+    objective: `Konsolidasi ${displayName}`,
+  });
+
+  return code;
+}
+
 async function ensureMasterParentRow(db, meta) {
   const code = meta.code;
   const [existing] = await db.query('SELECT id FROM kpis WHERE id = ?', [code]);
@@ -346,7 +390,9 @@ async function buildMasterPlanFromDb(db) {
   groups.forEach((g) => {
     const bucket = byPerspective[g.perspective] || byPerspective.financial;
     // Prefer display name: reserved, or most frequent, or longest
-    let displayName = [...g.names.entries()].sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)[0][0];
+    let displayName = stripNameSymbols(
+      [...g.names.entries()].sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)[0][0]
+    );
     if (g.groupKey === 'laba bersih') {
       displayName = RESERVED_CODES['KPI-FIN-01'].name;
     }
@@ -643,8 +689,10 @@ module.exports = {
   isLabaBersihChildName,
   groupKeyForName,
   normalizeNameKey,
+  stripNameSymbols,
   normalizePerspectiveKey,
   resolveMasterCodeForName,
+  ensureMasterCodeForKpi,
   ensureSchema,
   ensureMasterParentRow,
   buildMasterPlanFromDb,

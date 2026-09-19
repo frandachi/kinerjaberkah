@@ -2,15 +2,202 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <link rel="icon" type="image/jpeg" href="/kinerjaberkah/favicon.jpg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <title>Kinerja Berkah</title>
-    <script src="/kinerjaberkah/assets/captcha.js"></script>
     <script src="/kinerjaberkah/assets/mfa.js"></script>
-    <script type="module" crossorigin src="/kinerjaberkah/assets/index-CdyJlLvK.js"></script>
+
+    <script>
+      window.addEventListener('unhandledrejection', function(event) {
+        if (event.reason && event.reason.message && event.reason.message.includes('fetch dynamically imported module')) {
+          console.warn('New version available, reloading page...');
+          event.preventDefault();
+          window.location.reload();
+        }
+      });
+      (function () {
+
+        var origRemove = Node.prototype.removeChild;
+        Node.prototype.removeChild = function (child) {
+          if (!child || child.parentNode !== this) return child;
+          try { return origRemove.call(this, child); } catch (e) { return child; }
+        };
+        var origInsert = Node.prototype.insertBefore;
+        Node.prototype.insertBefore = function (node, ref) {
+          if (ref && ref.parentNode !== this) return node;
+          try { return origInsert.call(this, node, ref); } catch (e) { return node; }
+        };
+      })();
+    </script>
+
+    <!-- Dual Scorecard Tabs Injector -->
+    <script>
+      (function() {
+        let lastPeriodTab = 'lama';
+        let injectedTabs = null;
+
+        function injectTabsUI() {
+          // Find mutation alert box
+          const alerts = document.querySelectorAll('[class*="border-blue-200"][class*="bg-blue-50"]');
+          if (alerts.length === 0) {
+            injectedTabs = null;
+            return;
+          }
+
+          const mutationAlert = alerts[0];
+          
+          // Check if tabs already exist
+          if (document.getElementById('dual-scorecard-tabs')) {
+            return;
+          }
+
+          // Extract period labels from mutation alert
+          const tableRows = mutationAlert.querySelectorAll('tbody tr');
+          let oldLabel = 'Periode Lama', newLabel = 'Periode Baru';
+          let oldUnit = '', newUnit = '';
+          
+          tableRows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            if (cells.length >= 2) {
+              const periodText = cells[1].textContent;
+              if (periodText.includes('Jan') || periodText.includes('Feb')) {
+                const parts = periodText.split('·');
+                oldLabel = parts[0]?.trim() || oldLabel;
+                oldUnit = parts[1]?.trim() || '';
+              } else if (periodText.includes('Sep') || periodText.includes('Okt')) {
+                const parts = periodText.split('·');
+                newLabel = parts[0]?.trim() || newLabel;
+                newUnit = parts[1]?.trim() || '';
+              }
+            }
+          });
+
+          // Create tabs HTML
+          const tabsContainer = document.createElement('div');
+          tabsContainer.id = 'dual-scorecard-tabs';
+          tabsContainer.className = 'flex items-center justify-center gap-3 py-4 bg-gradient-to-r from-slate-50 to-blue-50 rounded-lg border border-slate-200';
+          tabsContainer.innerHTML = `
+            <span class="text-sm font-semibold text-slate-700">📊 Tampilkan scorecard:</span>
+            <div class="inline-flex rounded-lg border-2 border-slate-300 bg-white p-1 shadow-sm" role="tablist">
+              <button 
+                id="tab-lama" 
+                type="button" 
+                role="tab" 
+                aria-selected="true"
+                class="px-5 py-2 text-sm font-semibold rounded-md transition-all bg-blue-600 text-white shadow-md"
+                title="${oldUnit}"
+              >
+                ${oldLabel}
+              </button>
+              <button 
+                id="tab-baru" 
+                type="button" 
+                role="tab" 
+                aria-selected="false"
+                class="px-5 py-2 text-sm font-semibold rounded-md transition-all text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                title="${newUnit}"
+              >
+                ${newLabel}
+              </button>
+            </div>
+            <span class="text-xs text-slate-500 font-medium" id="period-unit-hint">${oldUnit || '—'}</span>
+          `;
+
+          // Insert after mutation alert
+          mutationAlert.parentNode.insertBefore(tabsContainer, mutationAlert.nextSibling);
+          injectedTabs = tabsContainer;
+
+          // Attach click handlers
+          document.getElementById('tab-lama').addEventListener('click', () => switchPeriod('lama', oldLabel, oldUnit));
+          document.getElementById('tab-baru').addEventListener('click', () => switchPeriod('baru', newLabel, newUnit));
+          
+          console.log('✅ Dual scorecard tabs injected successfully');
+        }
+
+        function switchPeriod(period, label, unit) {
+          lastPeriodTab = period;
+          
+          // Update tab styles
+          const tabLama = document.getElementById('tab-lama');
+          const tabBaru = document.getElementById('tab-baru');
+          const unitHint = document.getElementById('period-unit-hint');
+
+          if (period === 'lama') {
+            tabLama.className = 'px-5 py-2 text-sm font-semibold rounded-md transition-all bg-blue-600 text-white shadow-md';
+            tabLama.setAttribute('aria-selected', 'true');
+            tabBaru.className = 'px-5 py-2 text-sm font-semibold rounded-md transition-all text-slate-600 hover:text-slate-900 hover:bg-slate-50';
+            tabBaru.setAttribute('aria-selected', 'false');
+          } else {
+            tabBaru.className = 'px-5 py-2 text-sm font-semibold rounded-md transition-all bg-blue-600 text-white shadow-md';
+            tabBaru.setAttribute('aria-selected', 'true');
+            tabLama.className = 'px-5 py-2 text-sm font-semibold rounded-md transition-all text-slate-600 hover:text-slate-900 hover:bg-slate-50';
+            tabLama.setAttribute('aria-selected', 'false');
+          }
+
+          if (unitHint) unitHint.textContent = unit || '—';
+
+          // Try to trigger React state update via DOM manipulation
+          triggerReactStateUpdate(period);
+          
+          console.log(`🔄 Switched to period: ${period} (${label})`);
+        }
+
+        function triggerReactStateUpdate(period) {
+          // Find React fiber node and trigger state update
+          const root = document.getElementById('root');
+          if (!root || !root.firstChild) return;
+
+          // Try to find React internal instance
+          const key = Object.keys(root.firstChild).find(k => k.startsWith('__react'));
+          if (!key) {
+            console.warn('Could not find React instance for state update');
+            // Fallback: reload page with hash
+            window.location.hash = `period=${period}`;
+            window.location.reload();
+            return;
+          }
+
+          // Store period selection in sessionStorage for React to pick up
+          sessionStorage.setItem('kpi_period_tab', period);
+          
+          // Trigger a custom event that React might listen to
+          window.dispatchEvent(new CustomEvent('periodTabChange', { detail: { period } }));
+          
+          // Force re-render by simulating window resize
+          window.dispatchEvent(new Event('resize'));
+        }
+
+        // Check and inject periodically
+        const checkInterval = setInterval(() => {
+          const hasAlert = document.querySelector('[class*="border-blue-200"][class*="bg-blue-50"]');
+          const hasTabs = document.getElementById('dual-scorecard-tabs');
+          
+          if (hasAlert && !hasTabs) {
+            injectTabsUI();
+          } else if (!hasAlert && hasTabs) {
+            // Mutation alert disappeared, remove tabs
+            hasTabs.remove();
+            injectedTabs = null;
+          }
+        }, 300);
+
+        // Also check on navigation
+        window.addEventListener('popstate', () => {
+          setTimeout(injectTabsUI, 100);
+        });
+
+        console.log('🚀 Dual Scorecard Tabs script loaded');
+      })();
+    </script>
+
+    <script type="module" crossorigin src="/kinerjaberkah/assets/boot-20260918b.js?v=fileev2"></script>
+    <link rel="modulepreload" crossorigin href="/kinerjaberkah/assets/index-CdyJlLvAQ.js">
     <link rel="modulepreload" crossorigin href="/kinerjaberkah/assets/ui-Bxdhc9mB.js">
     <link rel="modulepreload" crossorigin href="/kinerjaberkah/assets/query-7fhvqgVT.js">
     <link rel="modulepreload" crossorigin href="/kinerjaberkah/assets/vendor-CvVmYoZI.js">

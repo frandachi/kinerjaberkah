@@ -11,10 +11,12 @@ const {
   mergeMonthlyDataRespectingLock,
   mergeMonthlyTarget,
   parseLockedMonths,
+  getMutationAllowedMonths,
 } = require('../lib/kpi-realisasi-lock');
 const {
   setupMasterKpiFin01,
   setupAllMasterKpis,
+  ensureMasterCodeForKpi,
   aggregateMasterFromChildren,
   syncChildMasterLink,
   reaggregateIfChildOrMaster,
@@ -26,6 +28,101 @@ const {
 
 function isMasterKpiId(id) {
   return typeof id === 'string' && /^KPI-[A-Z]+-\d+$/i.test(id);
+}
+
+/** Persist free-typed objective into master objectives table. */
+async function ensureObjectiveRow(connection, { name, perspective }) {
+  const nm = String(name || '').trim();
+  if (!nm) return null;
+  const persp = String(perspective || '').trim();
+  const [rows] = await connection.query(
+    'SELECT id, name FROM objectives WHERE name = ? AND (perspective = ? OR ? = \'\') LIMIT 1',
+    [nm, persp, persp]
+  );
+  if (rows.length) return rows[0];
+  const id = 'obj_' + Date.now() + Math.floor(Math.random() * 1000);
+  await connection.query(
+    'INSERT INTO objectives (id, name, perspective, description, divisi) VALUES (?, ?, ?, ?, ?)',
+    [id, nm, persp, '', '']
+  );
+  return { id, name: nm };
+}
+
+/** Persist free-typed KPI name into strategies master (linked to objective if known). */
+async function ensureStrategyRow(connection, { name, perspective, unit, description, formula, objectiveName, objectiveId }) {
+  const nm = String(name || '').trim();
+  if (!nm) return null;
+  const [rows] = await connection.query(
+    'SELECT id, name FROM strategies WHERE name = ? LIMIT 1',
+    [nm]
+  );
+  if (rows.length) return rows[0];
+  let objId = objectiveId || null;
+  if (!objId && objectiveName) {
+    const obj = await ensureObjectiveRow(connection, { name: objectiveName, perspective });
+    objId = obj?.id || null;
+  }
+  const id = 'str_' + Date.now() + Math.floor(Math.random() * 1000);
+  await connection.query(
+    'INSERT INTO strategies (id, objective_id, name, perspective, unit, description, formula) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [id, objId, nm, perspective || '', unit || '%', description || '', formula || '']
+  );
+  return { id, name: nm };
+}
+
+function normalizeKpiWritePayload(kpi) {
+  const out = { ...kpi };
+  out.name = String(out.name || '').trim();
+  out.unit_name = String(out.unit_name || '').trim();
+  out.objective = String(out.objective || '').trim();
+  out.unit = String(out.unit || '%').trim() || '%';
+  out.perspective = String(out.perspective || '').trim();
+  const unitType = String(out.unit_type || 'pegawai');
+  out.unit_type = unitType;
+  let jabatan = String(out.jabatan || '').trim();
+  if (!jabatan) {
+    jabatan = unitType === 'pegawai' ? '' : (out.unit_name || '-');
+  }
+  out.jabatan = jabatan;
+  const manualParent = String(out.parent_kpi_manual || '').trim();
+  out.parent_kpi_manual = manualParent || null;
+  out.pic = String(out.pic || '').trim() || null;
+  const desc = String(out.description || '').replace(/\n?\(KPI Induk:.*?\)\s*$/s, '').trim();
+  out.description = manualParent ? (desc ? desc + '\n' : '') + `(KPI Induk: ${manualParent})` : desc;
+  const indeks = out.manual_indeks !== undefined && out.manual_indeks !== null && out.manual_indeks !== ''
+    ? out.manual_indeks
+    : (out.indeks !== undefined && out.indeks !== null && out.indeks !== '' ? out.indeks : null);
+  out.manual_indeks = indeks === null || indeks === '' ? null : indeks;
+  return out;
+}
+
+let kpiFormColsReady = false;
+async function ensureKpiFormColumns(connection) {
+  if (kpiFormColsReady) return;
+  const cols = [
+    ['parent_kpi_manual', 'VARCHAR(255) NULL'],
+    ['pic', 'VARCHAR(255) NULL'],
+  ];
+  for (const [name, def] of cols) {
+    try {
+      await connection.query(`ALTER TABLE kpis ADD COLUMN ${name} ${def}`);
+    } catch (e) {
+      /* duplicate column or no permission — continue */
+    }
+  }
+  try {
+    await connection.query('SELECT parent_kpi_manual, pic FROM kpis LIMIT 0');
+    kpiFormColsReady = true;
+  } catch (e) {
+    console.warn('KPI form columns not ready:', e.message);
+  }
+}
+
+function extractParentManual(k) {
+  const direct = String(k.parent_kpi_manual || '').trim();
+  if (direct) return direct;
+  const m = String(k.description || '').match(/\(KPI Induk:\s*([\s\S]*?)\)\s*$/);
+  return m ? m[1].trim() : '';
 }
 
 function normalizeKpiNameKey(name) {
@@ -63,6 +160,7 @@ function parseKpiJsonFields(k) {
     monthly_data: typeof k.monthly_data === 'string' ? JSON.parse(k.monthly_data) : (k.monthly_data || {}),
     monthly_target: typeof k.monthly_target === 'string' ? JSON.parse(k.monthly_target) : (k.monthly_target || {}),
     monthly_data_locked: parseLockedMonths(k.monthly_data_locked),
+    parent_kpi_manual: extractParentManual(k),
   };
 }
 
@@ -282,27 +380,200 @@ router.get('/unit-summary', authenticateToken, async (req, res) => {
   }
 });
 
+// Unique KPI catalog for Master KPI tab (~300 rows vs ~18k instances)
+router.get('/catalog', authenticateToken, async (req, res) => {
+  try {
+    const search = String(req.query.search || '').trim();
+    const perspective = String(req.query.perspective || '').trim();
+    const where = ["COALESCE(unit_type, '') <> 'master'"];
+    const params = [];
+    if (search) {
+      where.push('(name LIKE ? OR objective LIKE ?)');
+      params.push(`%${search}%`, `%${search}%`);
+    }
+    if (perspective && perspective !== 'all') {
+      where.push('perspective = ?');
+      params.push(perspective);
+    }
+    if (req.user.role === 'user') {
+      where.push('unit_name = ?');
+      params.push(req.user.unit_name || '');
+    }
+    const sql = `
+      SELECT MIN(id) AS id,
+        MIN(name) AS name,
+        MIN(perspective) AS perspective,
+        MAX(unit) AS unit,
+        MAX(polarity) AS polarity,
+        MAX(status) AS status,
+        MAX(description) AS description,
+        MAX(formula) AS formula,
+        MAX(objective) AS objective,
+        MAX(weight) AS weight,
+        MAX(NULLIF(kpi_code, '')) AS kpi_code,
+        MAX(NULLIF(parent_kpi_id, '')) AS parent_kpi_id,
+        COUNT(*) AS instance_count,
+        COUNT(DISTINCT unit_name) AS unit_count
+      FROM kpis
+      WHERE ${where.join(' AND ')}
+      GROUP BY LOWER(TRIM(name)), LOWER(TRIM(COALESCE(perspective, '')))
+      ORDER BY MIN(name) ASC`;
+    const [rows] = await db.query(sql, params);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('X-KPI-Catalog-Count', String(rows.length));
+    res.json(rows);
+  } catch (error) {
+    console.error('KPI catalog error:', error.message);
+    res.status(500).json({ message: 'Gagal memuat katalog KPI' });
+  }
+});
+
+// Distinct unit names for Master KPI filter dropdown
+router.get('/units', authenticateToken, async (req, res) => {
+  try {
+    const where = ["COALESCE(unit_type, '') <> 'master'", "unit_name IS NOT NULL", "TRIM(unit_name) <> ''"];
+    const params = [];
+    if (req.user.role === 'user') {
+      where.push('unit_name = ?');
+      params.push(req.user.unit_name || '');
+    }
+    const [rows] = await db.query(
+      `SELECT DISTINCT unit_name FROM kpis WHERE ${where.join(' AND ')} ORDER BY unit_name ASC`,
+      params
+    );
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.json(rows.map((r) => r.unit_name).filter(Boolean));
+  } catch (error) {
+    console.error('KPI units error:', error.message);
+    res.status(500).json({ message: 'Gagal memuat daftar unit' });
+  }
+});
+
+// Bobot aggregate for Master KPI charts (optional unit filter)
+router.get('/weight-summary', authenticateToken, async (req, res) => {
+  try {
+    const unitName = String(req.query.unit_name || '').replace(/^\[[^\]]+\]\s*/, '').trim();
+    const search = String(req.query.search || '').trim();
+    const where = ["COALESCE(unit_type, '') <> 'master'"];
+    const params = [];
+    if (req.user.role === 'user') {
+      where.push('unit_name = ?');
+      params.push(req.user.unit_name || '');
+    } else if (unitName && unitName !== 'all') {
+      where.push('unit_name = ?');
+      params.push(unitName);
+    }
+    if (search) {
+      where.push('name LIKE ?');
+      params.push(`%${search}%`);
+    }
+    const [rows] = await db.query(
+      `SELECT perspective,
+        ROUND(SUM(COALESCE(weight,0)), 1) AS total_weight,
+        COUNT(*) AS kpi_count
+       FROM kpis
+       WHERE ${where.join(' AND ')}
+       GROUP BY perspective`,
+      params
+    );
+    const [[tot]] = await db.query(
+      `SELECT ROUND(SUM(COALESCE(weight,0)), 1) AS total_weight, COUNT(*) AS kpi_count
+       FROM kpis WHERE ${where.join(' AND ')}`,
+      params
+    );
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.json({
+      totalBobot: Number(tot?.total_weight) || 0,
+      count: Number(tot?.kpi_count) || 0,
+      byPersp: rows.map((r) => ({
+        key: r.perspective,
+        value: Number(r.total_weight) || 0,
+        count: Number(r.kpi_count) || 0,
+      })),
+    });
+  } catch (error) {
+    console.error('KPI weight-summary error:', error.message);
+    res.status(500).json({ message: 'Gagal memuat ringkasan bobot' });
+  }
+});
+
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    // NOTE: the built frontend (Dashboard, AllKPI, CascadingKPI, KPIIndividu,
-    // KPIUnit, OKRJabatan, PerspectivePage, ...) always fetches this endpoint
-    // with no page/limit params and does its own client-side filtering
-    // (e.g. `kpis.filter(...)`) over the full result. It expects a bare
-    // array, not a {data, pagination} envelope - returning the envelope, or
-    // silently truncating to the old default LIMIT 100 (out of 15000+ rows),
-    // caused "n.filter is not a function" crashes and incomplete dashboards.
-    const { search = '' } = req.query;
+    await ensureKpiFormColumns(db);
+    // NOTE: the built frontend expects a bare array (not {data, pagination}).
+    // Use ?fields=list to omit monthly JSON (~half payload) for management/dashboard.
+    // Use ?fields=full (default) when monthly_data is required (realisasi / scoring).
+    const {
+      search = '',
+      fields = 'full',
+      unit_name: filterUnitName = '',
+      jabatan: filterJabatan = '',
+      unit_type: filterUnitType = '',
+      perspective: filterPerspective = '',
+      include_master: includeMaster = '',
+    } = req.query;
 
-    let queryStr = 'SELECT * FROM kpis';
+    const isParentCascade = req.query.scope === 'parent-cascade';
+    const fieldMode = String(fields || 'full').toLowerCase();
+
+    const LIST_COLS =
+      'id, kpi_code, name, perspective, unit, polarity, target, actual, weight, unit_name, jabatan, strategy_id, unit_type, parent_kpi_id, parent_kpi_manual, pic, status, description, formula, objective, sort_order, is_locked, manual_indeks, approved_at, created_at';
+    const SCORE_COLS =
+      LIST_COLS + ', monthly_data, monthly_target, monthly_data_locked';
+    const CASCADE_COLS =
+      'id, name, unit_type, unit_name, jabatan, perspective, parent_kpi_id, kpi_code';
+
+    let selectCols = '*';
+    if (isParentCascade) selectCols = CASCADE_COLS;
+    else if (fieldMode === 'list' || fieldMode === 'summary') selectCols = LIST_COLS;
+    else if (fieldMode === 'score') selectCols = SCORE_COLS;
+
+    let queryStr = `SELECT ${selectCols} FROM kpis`;
     const queryParams = [];
-
     let whereClauses = [];
 
-    if (req.query.scope === 'parent-cascade') {
+    // Master rows are for aggregation only — exclude unless explicitly requested
+    if (!isParentCascade && String(includeMaster) !== '1' && String(includeMaster).toLowerCase() !== 'true') {
+      whereClauses.push("COALESCE(unit_type, '') <> 'master'");
+    }
+
+    if (isParentCascade) {
       // Opsi KPI Induk untuk form cascading (boleh diakses role user)
       whereClauses.push(
         "unit_type IN ('corporate','divisi','bidang','kck','kc','kcp','unit_kp')"
       );
+
+      // Filter ketat ke unit induk organisasi (unit-induk.json / cabInduk)
+      const childUnit = String(req.query.unit_name || '').replace(/^\[[^\]]+\]\s*/, '').trim();
+      const childType = String(req.query.unit_type || '').trim().toLowerCase();
+      if (childUnit) {
+        let parentName = null;
+        try {
+          const { parentUnitName } = require('../lib/atasanLangsung');
+          parentName = parentUnitName(childUnit);
+        } catch (e) {
+          parentName = null;
+        }
+
+        if (parentName) {
+          whereClauses.push('unit_name = ?');
+          queryParams.push(parentName);
+        } else if (childType === 'divisi') {
+          whereClauses.push("unit_type = 'corporate'");
+        } else if (childType === 'bidang') {
+          whereClauses.push("unit_type = 'divisi'");
+        } else if (childType === 'pegawai') {
+          whereClauses.push('unit_name = ?');
+          queryParams.push(childUnit);
+        } else {
+          // Tidak ada induk di struktur organisasi → skip (hasil kosong)
+          return res.json([]);
+        }
+      }
+
       if (req.user.role === 'user') {
         // Unit sendiri (semua level atas) + KPI corporate bank-wide
         whereClauses.push('(unit_name = ? OR unit_type = ?)');
@@ -314,11 +585,49 @@ router.get('/', authenticateToken, async (req, res) => {
         whereClauses.push('unit_name = ?');
         queryParams.push(req.user.unit_name);
       } else {
-        whereClauses.push('jabatan = ? AND unit_name = ?');
-        queryParams.push(req.user.jabatan, req.user.unit_name);
+        let extra = null;
+        try {
+          const [urows] = await db.query('SELECT pegawai_id FROM users WHERE id = ? LIMIT 1', [req.user.id]);
+          const pid = urows[0]?.pegawai_id;
+          if (pid) {
+            const [muts] = await db.query(
+              `SELECT old_unit_name, old_jabatan FROM mutation_history
+               WHERE pegawai_id = ? AND status = 'active'
+               ORDER BY effective_date DESC, id DESC LIMIT 1`,
+              [pid]
+            );
+            if (muts[0]?.old_unit_name && muts[0]?.old_jabatan) extra = muts[0];
+          }
+        } catch (_) { /* mutation table may be missing */ }
+        if (extra) {
+          whereClauses.push('((jabatan = ? AND unit_name = ?) OR (jabatan = ? AND unit_name = ?))');
+          queryParams.push(req.user.jabatan, req.user.unit_name, extra.old_jabatan, extra.old_unit_name);
+        } else {
+          whereClauses.push('jabatan = ? AND unit_name = ?');
+          queryParams.push(req.user.jabatan, req.user.unit_name);
+        }
       }
-    } 
-    
+    } else {
+      // Admin/superadmin: honor optional filters from the client
+      const unitName = String(filterUnitName || '').replace(/^\[[^\]]+\]\s*/, '').trim();
+      if (unitName) {
+        whereClauses.push('unit_name = ?');
+        queryParams.push(unitName);
+      }
+      if (filterJabatan) {
+        whereClauses.push('jabatan = ?');
+        queryParams.push(String(filterJabatan));
+      }
+      if (filterUnitType) {
+        whereClauses.push('unit_type = ?');
+        queryParams.push(String(filterUnitType));
+      }
+      if (filterPerspective) {
+        whereClauses.push('perspective = ?');
+        queryParams.push(String(filterPerspective));
+      }
+    }
+
     if (search) {
       whereClauses.push('(name LIKE ? OR unit_name LIKE ?)');
       const searchParam = `%${search}%`;
@@ -333,7 +642,20 @@ router.get('/', authenticateToken, async (req, res) => {
 
     const [kpis] = await db.query(queryStr, queryParams);
 
-    const parsedKpis = kpis.map(parseKpiJsonFields);
+    const parsedKpis = (isParentCascade || fieldMode === 'list' || fieldMode === 'summary'
+      ? kpis
+      : kpis.map(parseKpiJsonFields)
+    ).map((k) => ({ ...k, parent_kpi_manual: extractParentManual(k), pic: k.pic || '' }));
+
+    if (isParentCascade || fieldMode === 'list' || fieldMode === 'summary') {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+    } else {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+    }
+    res.setHeader('X-KPI-Fields', isParentCascade ? 'cascade' : fieldMode);
+    res.setHeader('X-KPI-Count', String(parsedKpis.length));
 
     res.json(parsedKpis);
   } catch (error) {
@@ -344,18 +666,38 @@ router.get('/', authenticateToken, async (req, res) => {
 
 router.post('/', authenticateToken, authorizeRole('superadmin', 'admin', 'user'), auditMiddleware('CREATE_KPI'), async (req, res) => {
   try {
-    const kpi = { ...req.body };
+    let kpi = normalizeKpiWritePayload(req.body || {});
     // Pegawai hanya boleh membuat KPI untuk jabatan/unit sendiri
     if (req.user.role === 'user') {
       kpi.jabatan = req.user.jabatan;
       kpi.unit_name = req.user.unit_name;
       kpi.unit_type = 'pegawai';
     }
-    if (!kpi.name || !String(kpi.name).trim()) {
+    if (!kpi.name) {
       return res.status(400).json({ message: 'Nama KPI wajib diisi' });
     }
-    if (!kpi.unit_name || !kpi.jabatan) {
-      return res.status(400).json({ message: 'Unit kerja dan jabatan wajib diisi' });
+    if (!kpi.unit_name) {
+      kpi.unit_name = '-';
+    }
+    if (!kpi.jabatan) kpi.jabatan = kpi.unit_name || '-';
+    // jabatan tidak wajib ketat — default ke unit_name
+
+    // Persist free-typed objective / strategy into master tables
+    try {
+      if (kpi.objective) {
+        await ensureObjectiveRow(db, { name: kpi.objective, perspective: kpi.perspective });
+      }
+      const strat = await ensureStrategyRow(db, {
+        name: kpi.name,
+        perspective: kpi.perspective,
+        unit: kpi.unit,
+        description: kpi.description,
+        formula: kpi.formula,
+        objectiveName: kpi.objective,
+      });
+      if (strat?.id && !kpi.strategy_id) kpi.strategy_id = strat.id;
+    } catch (e) {
+      console.warn('ensure objective/strategy on create:', e.message);
     }
 
     await assertUniqueKpiName(db, {
@@ -365,14 +707,21 @@ router.post('/', authenticateToken, authorizeRole('superadmin', 'admin', 'user')
     });
 
     const id = 'kpi_' + Date.now() + Math.floor(Math.random() * 1000);
-    const masterCode = await resolveMasterCodeForName(db, kpi.name);
+    const masterCode = await ensureMasterCodeForKpi(db, {
+      name: kpi.name,
+      perspective: kpi.perspective,
+      unit: kpi.unit,
+      polarity: kpi.polarity,
+    });
 
+    await ensureKpiFormColumns(db);
     await db.query(
-      'INSERT INTO kpis (id, kpi_code, name, perspective, unit, polarity, target, actual, weight, unit_name, jabatan, strategy_id, monthly_data, monthly_target, unit_type, parent_kpi_id, status, description, formula, objective) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO kpis (id, kpi_code, name, perspective, unit, polarity, target, actual, weight, unit_name, jabatan, strategy_id, monthly_data, monthly_target, unit_type, parent_kpi_id, parent_kpi_manual, pic, status, description, formula, objective, manual_indeks) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
-        id, masterCode, kpi.name, kpi.perspective, kpi.unit, kpi.polarity || 'maximize', kpi.target || 0, kpi.actual || 0, kpi.weight || 0,
-        kpi.unit_name, kpi.jabatan, kpi.strategy_id, JSON.stringify(kpi.monthly_data || {}), JSON.stringify(kpi.monthly_target || {}),
-        kpi.unit_type || 'pegawai', masterCode, kpi.status || 'Draft', kpi.description || null, kpi.formula || null, kpi.objective || null
+        id, masterCode, kpi.name, kpi.perspective, kpi.unit, kpi.polarity || 'maximize', kpi.target ?? 0, kpi.actual ?? 0, kpi.weight ?? 0,
+        kpi.unit_name, kpi.jabatan, kpi.strategy_id || null, JSON.stringify(kpi.monthly_data || {}), JSON.stringify(kpi.monthly_target || {}),
+        kpi.unit_type || 'pegawai', masterCode, kpi.parent_kpi_manual || null, kpi.pic || null,
+        kpi.status || 'Draft', kpi.description || null, kpi.formula || null, kpi.objective || null, kpi.manual_indeks
       ]
     );
 
@@ -588,12 +937,20 @@ router.put('/:id/realisasi', authenticateToken, auditMiddleware('UPDATE_KPI_REAL
       if (req.user.jabatan !== existing.jabatan || req.user.unit_name !== existing.unit_name) {
         return res.status(403).json({ message: 'Anda hanya bisa mengisi realisasi KPI Anda sendiri' });
       }
-      // Input realisasi & target bulanan dibuka untuk semua user (tidak diblokir monthly_data_locked)
     }
 
-    const mergedMonthly = mergeMonthlyDataRespectingLock(existing, incomingMonthly || {}, req.user.role);
+    // Mutasi: soft-lock — bulan di luar periode scorecard di-strip saat merge
+    // (jangan 400: client sering kirim full monthly_data/target dan memicu false positive)
+    const mutationMonths = await getMutationAllowedMonths(db, existing);
+
+    const mergedMonthly = mergeMonthlyDataRespectingLock(
+      existing,
+      incomingMonthly || {},
+      req.user.role,
+      mutationMonths
+    );
     const mergedTarget = incomingTarget
-      ? mergeMonthlyTarget(existing, incomingTarget)
+      ? mergeMonthlyTarget(existing, incomingTarget, mutationMonths)
       : (existing.monthly_target || {});
     const unitType = normalizeUnit(existing.unit);
     const actual = computeYtdActual(unitType, mergedMonthly);
@@ -613,33 +970,76 @@ router.put('/:id/realisasi', authenticateToken, auditMiddleware('UPDATE_KPI_REAL
       [JSON.stringify(mergedMonthly), JSON.stringify(mergedTarget), actual, yearlyTarget, id]
     );
 
+    // Log successful save for verification
+    console.log(`✓ KPI Realisasi saved successfully: ID=${id}, User=${req.user.name || req.user.id}, Actual=${actual}`);
+
     try { await reaggregateIfChildOrMaster(db, id); } catch (e) { console.warn('master reaggregate after realisasi:', e.message); }
 
     const [updated] = await db.query('SELECT * FROM kpis WHERE id = ?', [id]);
-    res.json(parseKpiJsonFields(updated[0]));
+    const result = parseKpiJsonFields(updated[0]);
+    
+    // Add success flag to response for client-side confirmation
+    res.json({ ...result, _saved: true, _message: 'Data berhasil disimpan' });
   } catch (error) {
     console.error('Update KPI realisasi error:', error.message);
     res.status(500).json({ message: 'Terjadi kesalahan pada server' });
   }
 });
 
-router.put('/:id', authenticateToken, authorizeRole('superadmin', 'admin'), auditMiddleware('UPDATE_KPI'), async (req, res) => {
+router.put('/:id', authenticateToken, authorizeRole('superadmin', 'admin', 'user'), auditMiddleware('UPDATE_KPI'), async (req, res) => {
   try {
     const { id } = req.params;
-    const kpi = req.body;
+    let kpi = normalizeKpiWritePayload(req.body || {});
 
-    if (!kpi.name || !String(kpi.name).trim()) {
+    if (!kpi.name) {
       return res.status(400).json({ message: 'Nama KPI wajib diisi' });
     }
 
     const [existingRows] = await db.query(
-      'SELECT id, name, kpi_code, parent_kpi_id, unit_type FROM kpis WHERE id = ?',
+      'SELECT id, name, kpi_code, parent_kpi_id, unit_type, unit_name, jabatan, status, is_locked FROM kpis WHERE id = ?',
       [id]
     );
     if (!existingRows.length) {
       return res.status(404).json({ message: 'KPI tidak ditemukan' });
     }
     const existingForUpdate = existingRows[0];
+
+    // Pegawai hanya boleh mengedit KPI jabatan/unit sendiri
+    if (req.user.role === 'user') {
+      if (
+        req.user.jabatan !== existingForUpdate.jabatan ||
+        req.user.unit_name !== existingForUpdate.unit_name
+      ) {
+        return res.status(403).json({ message: 'Anda hanya bisa mengedit KPI Anda sendiri' });
+      }
+      if (existingForUpdate.is_locked || String(existingForUpdate.status || '') === 'Approved') {
+        return res.status(400).json({ message: 'KPI terkunci/Approved tidak dapat diedit' });
+      }
+      kpi.jabatan = req.user.jabatan;
+      kpi.unit_name = req.user.unit_name;
+      kpi.unit_type = existingForUpdate.unit_type || 'pegawai';
+      kpi.status = existingForUpdate.status || 'Draft';
+    }
+
+    if (!kpi.unit_name) kpi.unit_name = '-';
+    if (!kpi.jabatan) kpi.jabatan = kpi.unit_name || '-';
+
+    try {
+      if (kpi.objective) {
+        await ensureObjectiveRow(db, { name: kpi.objective, perspective: kpi.perspective });
+      }
+      const strat = await ensureStrategyRow(db, {
+        name: kpi.name,
+        perspective: kpi.perspective,
+        unit: kpi.unit,
+        description: kpi.description,
+        formula: kpi.formula,
+        objectiveName: kpi.objective,
+      });
+      if (strat?.id && !kpi.strategy_id) kpi.strategy_id = strat.id;
+    } catch (e) {
+      console.warn('ensure objective/strategy on update:', e.message);
+    }
 
     await assertUniqueKpiName(db, {
       name: kpi.name,
@@ -652,19 +1052,25 @@ router.put('/:id', authenticateToken, authorizeRole('superadmin', 'admin'), audi
       return res.status(400).json({ message: 'KPI master tidak boleh diubah manual. Gunakan reaggregate.' });
     }
 
-    const masterCode = await resolveMasterCodeForName(db, kpi.name);
+    const masterCode = await ensureMasterCodeForKpi(db, {
+      name: kpi.name,
+      perspective: kpi.perspective,
+      unit: kpi.unit,
+      polarity: kpi.polarity,
+    });
 
+    await ensureKpiFormColumns(db);
     await db.query(
-      'UPDATE kpis SET name=?, perspective=?, unit=?, polarity=?, target=?, actual=?, weight=?, unit_name=?, jabatan=?, strategy_id=?, manual_indeks=?, monthly_data=?, monthly_target=?, status=?, unit_type=?, description=?, formula=?, objective=?, parent_kpi_id=?, kpi_code=? WHERE id=?',
+      'UPDATE kpis SET name=?, perspective=?, unit=?, polarity=?, target=?, actual=?, weight=?, unit_name=?, jabatan=?, strategy_id=?, manual_indeks=?, monthly_data=?, monthly_target=?, status=?, unit_type=?, description=?, formula=?, objective=?, parent_kpi_id=?, parent_kpi_manual=?, pic=?, kpi_code=? WHERE id=?',
       [
         kpi.name, kpi.perspective, kpi.unit, kpi.polarity || 'maximize', kpi.target, kpi.actual, kpi.weight,
         kpi.unit_name, kpi.jabatan, kpi.strategy_id || null,
-        kpi.manual_indeks !== undefined && kpi.manual_indeks !== null && kpi.manual_indeks !== '' ? kpi.manual_indeks : null,
+        kpi.manual_indeks,
         JSON.stringify(kpi.monthly_data || {}),
         JSON.stringify(kpi.monthly_target || {}),
         kpi.status || 'Draft', kpi.unit_type || 'pegawai',
         kpi.description || null, kpi.formula || null, kpi.objective || null,
-        masterCode, masterCode, id
+        masterCode, kpi.parent_kpi_manual || null, kpi.pic || null, masterCode, id
       ]
     );
 
@@ -716,17 +1122,79 @@ router.delete('/by-jabatan', authenticateToken, authorizeRole('superadmin', 'adm
   }
 });
 
-router.delete('/:id', authenticateToken, authorizeRole('superadmin', 'admin'), auditMiddleware('DELETE_KPI'), async (req, res) => {
+router.delete('/:id', authenticateToken, authorizeRole('superadmin', 'admin', 'user'), auditMiddleware('DELETE_KPI'), async (req, res) => {
   try {
     const { id } = req.params;
     if (isMasterKpiId(id)) {
       return res.status(400).json({ message: 'KPI master tidak boleh dihapus' });
     }
 
-    const [rows] = await db.query('SELECT kpi_code, parent_kpi_id FROM kpis WHERE id = ?', [id]);
-    const code = rows[0]?.kpi_code || rows[0]?.parent_kpi_id;
+    const [rows] = await db.query(
+      'SELECT kpi_code, parent_kpi_id, unit_name, jabatan, status, is_locked, unit_type FROM kpis WHERE id = ?',
+      [id]
+    );
+    if (!rows.length) {
+      return res.status(404).json({ message: 'KPI tidak ditemukan' });
+    }
+    const existing = rows[0];
+
+    // PROTEKSI MUTASI: Jangan izinkan penghapusan KPI yang terdaftar di Scorecard Periode Lama (sebelum mutasi)
+    try {
+      const [activeMuts] = await db.query(
+        "SELECT id, employee_name, old_kpi_ids FROM mutation_history WHERE status = 'active'"
+      );
+      for (const m of activeMuts) {
+        let oldIds = [];
+        try {
+          oldIds = Array.isArray(m.old_kpi_ids) ? m.old_kpi_ids : JSON.parse(m.old_kpi_ids || '[]');
+        } catch {}
+        if (oldIds.map(String).includes(String(id))) {
+          return res.status(400).json({
+            message: `KPI ini terdaftar pada Scorecard Periode Lama (sebelum mutasi) pegawai ${m.employee_name || ''} dan tidak dapat dihapus.`,
+          });
+        }
+      }
+    } catch (errProtect) {
+      console.warn('Check mutation old_kpi_ids error:', errProtect.message);
+    }
+
+    if (req.user.role === 'user') {
+      if (req.user.jabatan !== existing.jabatan || req.user.unit_name !== existing.unit_name) {
+        return res.status(403).json({ message: 'Anda hanya bisa menghapus KPI Anda sendiri' });
+      }
+      if (existing.is_locked || String(existing.status || '') === 'Approved') {
+        return res.status(400).json({ message: 'KPI terkunci/Approved tidak dapat dihapus' });
+      }
+      if (existing.unit_type === 'master') {
+        return res.status(400).json({ message: 'KPI master tidak boleh dihapus' });
+      }
+    }
+
+    const code = existing.kpi_code || existing.parent_kpi_id;
 
     await db.query('DELETE FROM kpis WHERE id = ?', [id]);
+
+    // Jika KPI ini ada di new_kpi_ids mutasi aktif, sinkronkan array-nya agar tidak ada ID menggantung
+    try {
+      const [activeMuts] = await db.query(
+        "SELECT id, new_kpi_ids FROM mutation_history WHERE status = 'active'"
+      );
+      for (const m of activeMuts) {
+        let newIds = [];
+        try {
+          newIds = Array.isArray(m.new_kpi_ids) ? m.new_kpi_ids : JSON.parse(m.new_kpi_ids || '[]');
+        } catch {}
+        if (newIds.map(String).includes(String(id))) {
+          const updatedNewIds = newIds.filter((x) => String(x) !== String(id));
+          await db.query('UPDATE mutation_history SET new_kpi_ids = ? WHERE id = ?', [
+            JSON.stringify(updatedNewIds),
+            m.id,
+          ]);
+        }
+      }
+    } catch (errSync) {
+      console.warn('Sync new_kpi_ids on delete error:', errSync.message);
+    }
 
     if (code && isMasterKpiId(code)) {
       try { await aggregateMasterFromChildren(db, code); } catch (e) { console.warn('master reaggregate after delete:', e.message); }

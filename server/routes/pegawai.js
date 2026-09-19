@@ -331,6 +331,7 @@ router.post('/sync-hris', authenticateToken, authorizeRole('admin', 'superadmin'
       usersCreated,
     });
   } catch (error) {
+    console.error('HRIS Sync Error:', error.message);
     res.status(500).json({ message: 'Gagal sinkronisasi data dari HRIS', error: error.message });
   }
 });

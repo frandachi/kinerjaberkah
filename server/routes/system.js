@@ -60,71 +60,93 @@ function hasMonthlyRealisasi(monthlyData) {
   );
 }
 
+// In-memory cache: login page hits this on every visit; full-table scan is expensive (~18k rows).
+const PUBLIC_SUMMARY_TTL_MS = 120_000;
+let publicSummaryCache = { at: 0, payload: null };
+
+async function buildPublicSummary() {
+  const [rows] = await db.query(
+    `SELECT unit_type, perspective, target, actual, unit, polarity, monthly_data, monthly_target
+     FROM kpis
+     WHERE COALESCE(unit_type, '') <> 'master'`
+  );
+
+  const levels = {
+    corporate: { count: 0, sum: 0, n: 0 },
+    divisi: { count: 0, sum: 0, n: 0 },
+    cabang: { count: 0, sum: 0, n: 0 },
+    cabang_pembantu: { count: 0, sum: 0, n: 0 },
+  };
+  const perspectives = {
+    financial: { sum: 0, n: 0 },
+    customer: { sum: 0, n: 0 },
+    internal_process: { sum: 0, n: 0 },
+    learning_growth: { sum: 0, n: 0 },
+  };
+
+  let totalKpis = 0;
+  let overallSum = 0;
+  let overallN = 0;
+
+  for (const row of rows) {
+    totalKpis += 1;
+    const { pencapaian: raw } = computeKpiYtdScores(row);
+    const pencapaian = Math.min(Math.max(raw || 0, 0), 120);
+    const measurable = hasMonthlyRealisasi(row.monthly_data) || pencapaian > 0;
+    const level = classifyOrgLevel(row.unit_type);
+
+    if (level && levels[level]) {
+      levels[level].count += 1;
+      if (measurable) {
+        levels[level].sum += pencapaian;
+        levels[level].n += 1;
+      }
+    }
+
+    if (perspectives[row.perspective] && measurable) {
+      perspectives[row.perspective].sum += pencapaian;
+      perspectives[row.perspective].n += 1;
+    }
+
+    if (measurable) {
+      overallSum += pencapaian;
+      overallN += 1;
+    }
+  }
+
+  return {
+    totalKpis,
+    overallPencapaian: overallN > 0 ? Math.round(overallSum / overallN) : 0,
+    orgLevels: Object.entries(levels).map(([key, v]) => ({
+      key,
+      count: v.count,
+      pencapaian: v.n > 0 ? Math.round(v.sum / v.n) : 0,
+    })),
+    perspectives: Object.entries(perspectives).map(([key, v]) => ({
+      key,
+      pencapaian: v.n > 0 ? Math.round(v.sum / v.n) : 0,
+    })),
+    cachedAt: new Date().toISOString(),
+  };
+}
+
 // Public, unauthenticated aggregate summary (counts + achievement %) used to
 // render the marketing/summary charts on the Login page. Intentionally never
 // exposes individual KPI names, unit names, or personal data.
 router.get('/public-summary', async (req, res) => {
   try {
-    const [rows] = await db.query(
-      'SELECT unit_type, perspective, target, actual, unit, polarity, monthly_data, monthly_target FROM kpis'
-    );
-
-    const levels = {
-      corporate: { count: 0, sum: 0, n: 0 },
-      divisi: { count: 0, sum: 0, n: 0 },
-      cabang: { count: 0, sum: 0, n: 0 },
-      cabang_pembantu: { count: 0, sum: 0, n: 0 },
-    };
-    const perspectives = {
-      financial: { sum: 0, n: 0 },
-      customer: { sum: 0, n: 0 },
-      internal_process: { sum: 0, n: 0 },
-      learning_growth: { sum: 0, n: 0 },
-    };
-
-    let totalKpis = 0;
-    let overallSum = 0;
-    let overallN = 0;
-
-    for (const row of rows) {
-      totalKpis += 1;
-      const { pencapaian: raw } = computeKpiYtdScores(row);
-      const pencapaian = Math.min(Math.max(raw || 0, 0), 120);
-      const measurable = hasMonthlyRealisasi(row.monthly_data) || pencapaian > 0;
-      const level = classifyOrgLevel(row.unit_type);
-
-      if (level && levels[level]) {
-        levels[level].count += 1;
-        if (measurable) {
-          levels[level].sum += pencapaian;
-          levels[level].n += 1;
-        }
-      }
-
-      if (perspectives[row.perspective] && measurable) {
-        perspectives[row.perspective].sum += pencapaian;
-        perspectives[row.perspective].n += 1;
-      }
-
-      if (measurable) {
-        overallSum += pencapaian;
-        overallN += 1;
-      }
+    const now = Date.now();
+    if (publicSummaryCache.payload && now - publicSummaryCache.at < PUBLIC_SUMMARY_TTL_MS) {
+      res.setHeader('X-Cache', 'HIT');
+      res.setHeader('Cache-Control', 'public, max-age=60');
+      return res.json(publicSummaryCache.payload);
     }
 
-    res.json({
-      totalKpis,
-      overallPencapaian: overallN > 0 ? Math.round(overallSum / overallN) : 0,
-      orgLevels: Object.entries(levels).map(([key, v]) => ({
-        key,
-        count: v.count,
-        pencapaian: v.n > 0 ? Math.round(v.sum / v.n) : 0,
-      })),
-      perspectives: Object.entries(perspectives).map(([key, v]) => ({
-        key,
-        pencapaian: v.n > 0 ? Math.round(v.sum / v.n) : 0,
-      })),
-    });
+    const payload = await buildPublicSummary();
+    publicSummaryCache = { at: now, payload };
+    res.setHeader('X-Cache', 'MISS');
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    res.json(payload);
   } catch (error) {
     console.error('Public summary error:', error.message);
     res.status(500).json({ message: 'Terjadi kesalahan pada server' });

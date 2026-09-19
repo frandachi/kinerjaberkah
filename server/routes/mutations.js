@@ -4,7 +4,13 @@ const authenticateToken = require('../middleware/auth');
 const authorizeRole = require('../middleware/authorize');
 const { assertPegawaiAccess } = require('../lib/pegawai-access');
 const { auditMiddleware } = require('../middleware/audit');
-const { computeKpiYtdScores } = require('../lib/kpi-scoring');
+const {
+  monthKeysInclusive,
+  formatMonthRangeLabel,
+  summarizeKpiSet,
+  predikatFromPencapaian,
+} = require('../lib/kpi-scoring');
+const { importMutationFromBuffer } = require('../lib/import-mutation-kpi');
 
 const router = express.Router();
 
@@ -87,6 +93,55 @@ async function ensureMutationSchema() {
 }
 
 ensureMutationSchema().catch(() => {});
+
+router.post(
+  '/import-kpi',
+  authenticateToken,
+  authorizeRole('superadmin', 'admin'),
+  auditMiddleware('IMPORT_MUTATION_KPI'),
+  async (req, res) => {
+    try {
+      const { fileBase64, pegawaiId, force, dryRun } = req.body || {};
+      if (!fileBase64) {
+        return res.status(400).json({ message: 'File Excel wajib diunggah' });
+      }
+
+      let b64 = String(fileBase64);
+      const comma = b64.indexOf(',');
+      if (comma >= 0 && b64.slice(0, comma).includes('base64')) {
+        b64 = b64.slice(comma + 1);
+      }
+
+      const buffer = Buffer.from(b64, 'base64');
+      if (!buffer.length) {
+        return res.status(400).json({ message: 'File kosong atau tidak valid' });
+      }
+
+      const result = await importMutationFromBuffer(buffer, {
+        pegawaiId: pegawaiId || null,
+        force: !!force,
+        dryRun: !!dryRun,
+        createdBy: req.user?.username || req.user?.npp || 'upload-kpi-mutasi',
+      });
+
+      return res.json(result);
+    } catch (error) {
+      const code = error.code || '';
+      const status =
+        code === 'ACTIVE_MUTATION'
+          ? 409
+          : ['PEGAWAI_NOT_FOUND', 'MISSING_META', 'EMPTY_KPI', 'INVALID_TEMPLATE'].includes(code)
+            ? 400
+            : 500;
+      console.error('import-kpi mutation:', error.message);
+      return res.status(status).json({
+        message: error.message || 'Gagal import KPI mutasi',
+        code: error.code || undefined,
+        existing_id: error.existing_id || undefined,
+      });
+    }
+  }
+);
 
 router.post('/', authenticateToken, authorizeRole('superadmin', 'admin'), auditMiddleware('CREATE_MUTATION'), async (req, res) => {
   const {
@@ -190,6 +245,10 @@ router.post('/', authenticateToken, authorizeRole('superadmin', 'admin'), auditM
       'UPDATE pegawai SET unit_name = ?, jabatan = ? WHERE id = ?',
       [new_unit_name, new_jabatan, pegawai_id]
     );
+    await db.query(
+      'UPDATE users SET unit_name = ?, jabatan = ? WHERE pegawai_id = ?',
+      [new_unit_name, new_jabatan, pegawai_id]
+    );
 
     // Lock KPI unit asal (periode sebelum mutasi)
     if (old_kpi_ids.length) {
@@ -210,9 +269,22 @@ router.post('/', authenticateToken, authorizeRole('superadmin', 'admin'), auditM
   }
 });
 
-router.get('/', authenticateToken, authorizeRole('superadmin', 'admin'), async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     await ensureMutationSchema();
+    if (req.user.role === 'user') {
+      const [users] = await db.query('SELECT pegawai_id FROM users WHERE id = ? LIMIT 1', [req.user.id]);
+      const pegawaiId = users[0]?.pegawai_id;
+      if (!pegawaiId) return res.json([]);
+      const [mutations] = await db.query(
+        'SELECT * FROM mutation_history WHERE pegawai_id = ? ORDER BY effective_date DESC, id DESC',
+        [pegawaiId]
+      );
+      return res.json(mutations.map(parseMutationRow));
+    }
+    if (!['superadmin', 'admin'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Akses ditolak' });
+    }
     const [mutations] = await db.query(
       'SELECT * FROM mutation_history ORDER BY effective_date DESC, id DESC'
     );
@@ -224,13 +296,22 @@ router.get('/', authenticateToken, authorizeRole('superadmin', 'admin'), async (
 });
 
 /** Detail mutasi + ringkasan KPI per perspektif */
-router.get('/detail/:id', authenticateToken, authorizeRole('superadmin', 'admin'), async (req, res) => {
+router.get('/detail/:id', authenticateToken, async (req, res) => {
   try {
     await ensureMutationSchema();
     const [rows] = await db.query('SELECT * FROM mutation_history WHERE id = ?', [req.params.id]);
     if (!rows.length) return res.status(404).json({ message: 'Mutasi tidak ditemukan' });
 
     const mutation = parseMutationRow(rows[0]);
+    if (req.user.role === 'user') {
+      const [users] = await db.query('SELECT pegawai_id FROM users WHERE id = ? LIMIT 1', [req.user.id]);
+      const pegawaiId = users[0]?.pegawai_id;
+      if (!pegawaiId || String(mutation.pegawai_id) !== String(pegawaiId)) {
+        return res.status(403).json({ message: 'Anda tidak memiliki izin untuk melihat mutasi ini' });
+      }
+    } else if (!['superadmin', 'admin'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Akses ditolak' });
+    }
     let oldKpis = [];
     let newKpis = [];
 
@@ -324,6 +405,10 @@ router.post('/:id/cancel', authenticateToken, authorizeRole('superadmin', 'admin
         'UPDATE pegawai SET unit_name = ?, jabatan = ? WHERE id = ?',
         [m.old_unit_name, m.old_jabatan, m.pegawai_id]
       );
+      await db.query(
+        'UPDATE users SET unit_name = ?, jabatan = ? WHERE pegawai_id = ?',
+        [m.old_unit_name, m.old_jabatan, m.pegawai_id]
+      );
     }
 
     res.json({ success: true, message: 'Mutasi dibatalkan' });
@@ -347,11 +432,69 @@ router.get('/:pegawai_id', authenticateToken, async (req, res) => {
   }
 });
 
+function parseKpiRow(row) {
+  const parse = (value) => {
+    if (!value) return {};
+    if (typeof value === 'object') return value;
+    try { return JSON.parse(value); } catch { return {}; }
+  };
+  return {
+    ...row,
+    monthly_data: parse(row.monthly_data),
+    monthly_target: parse(row.monthly_target),
+  };
+}
+
+async function loadKpisByPair(unitName, jabatan) {
+  if (!unitName || !jabatan) return [];
+  const [rows] = await db.query(
+    "SELECT * FROM kpis WHERE unit_name = ? AND jabatan = ? AND COALESCE(unit_type, '') <> 'master' ORDER BY sort_order ASC, id ASC",
+    [unitName, jabatan]
+  );
+  return rows.map(parseKpiRow);
+}
+
+async function loadKpisByIdsOrPair(ids, unitName, jabatan, { preferLive = false } = {}) {
+  // Periode baru harus live: KPI yang ditambah setelah mutasi ikut tampil.
+  if (preferLive) {
+    const live = await loadKpisByPair(unitName, jabatan);
+    if (live.length) return live;
+  }
+  if (ids?.length) {
+    const [rows] = await db.query(
+      `SELECT * FROM kpis WHERE id IN (${ids.map(() => '?').join(',')})`,
+      ids
+    );
+    return rows.map(parseKpiRow);
+  }
+  return loadKpisByPair(unitName, jabatan);
+}
+
+function buildPeriodPayload(kpis, monthKeys, unitName, jabatan) {
+  const summary = summarizeKpiSet(kpis, monthKeys);
+  return {
+    unit_name: unitName || '',
+    jabatan: jabatan || '',
+    months: monthKeys.length,
+    month_keys: monthKeys,
+    label: formatMonthRangeLabel(monthKeys),
+    weight: 0,
+    pencapaian: summary.pencapaian,
+    skor: summary.skor,
+    status: summary.status,
+    scoredCount: summary.scoredCount,
+    kpiTotal: summary.kpiTotal,
+    kpis,
+  };
+}
+
 router.get('/:pegawai_id/calculate-score', authenticateToken, async (req, res) => {
   try {
     if (!(await assertPegawaiAccess(req, res, db, req.params.pegawai_id))) return;
     const [mutations] = await db.query(
-      'SELECT * FROM mutation_history WHERE pegawai_id = ? AND status = "active"',
+      `SELECT * FROM mutation_history
+       WHERE pegawai_id = ? AND status = "active"
+       ORDER BY effective_date DESC, id DESC LIMIT 1`,
       [req.params.pegawai_id]
     );
 
@@ -360,65 +503,67 @@ router.get('/:pegawai_id/calculate-score', authenticateToken, async (req, res) =
     }
 
     const mutation = parseMutationRow(mutations[0]);
-    const oldStart = new Date(mutation.old_period_start);
-    const oldEnd = new Date(mutation.old_period_end);
-    const oldMonths = (oldEnd.getFullYear() - oldStart.getFullYear()) * 12 + (oldEnd.getMonth() - oldStart.getMonth()) + 1;
+    const oldMonthKeys = monthKeysInclusive(mutation.old_period_start, mutation.old_period_end);
+    // Periode baru: buka semua bulan setelah mutasi s/d akhir tahun (boleh isi realisasi/target).
+    const newMonthKeys = monthKeysInclusive(mutation.new_period_start, mutation.new_period_end);
 
-    const newStart = new Date(mutation.new_period_start);
-    const newEnd = new Date(mutation.new_period_end);
-    const newMonths = (newEnd.getFullYear() - newStart.getFullYear()) * 12 + (newEnd.getMonth() - newStart.getMonth()) + 1;
+    const oldKpis = await loadKpisByIdsOrPair(
+      mutation.old_kpi_ids,
+      mutation.old_unit_name,
+      mutation.old_jabatan,
+      { preferLive: false }
+    );
 
-    const totalMonths = Math.max(oldMonths + newMonths, 1);
-    const oldWeight = oldMonths / totalMonths;
-    const newWeight = newMonths / totalMonths;
-
-    let oldKpis = [];
+    // Isolasi ketat: newKpis TIDAK BOLEH mencampuradukkan KPI dari periode lama (old_kpi_ids)
+    const oldIdSet = new Set((mutation.old_kpi_ids || []).map(String));
     let newKpis = [];
-    if (mutation.old_kpi_ids?.length) {
-      const [oks] = await db.query(
-        `SELECT * FROM kpis WHERE id IN (${mutation.old_kpi_ids.map(() => '?').join(',')})`,
-        mutation.old_kpi_ids
-      );
-      oldKpis = oks;
-    }
     if (mutation.new_kpi_ids?.length) {
-      const [nks] = await db.query(
+      const [rows] = await db.query(
         `SELECT * FROM kpis WHERE id IN (${mutation.new_kpi_ids.map(() => '?').join(',')})`,
         mutation.new_kpi_ids
       );
-      newKpis = nks;
+      newKpis = rows.map(parseKpiRow);
+    }
+    if (!newKpis.length) {
+      const liveNew = await loadKpisByPair(mutation.new_unit_name, mutation.new_jabatan);
+      newKpis = liveNew.filter((k) => !oldIdSet.has(String(k.id)));
     }
 
-    let oldScore = 0;
-    let oldTotalWeight = 0;
-    for (const kpi of oldKpis) {
-      const weight = parseFloat(kpi.weight) || 0;
-      const { hasil } = computeKpiYtdScores(kpi);
-      oldScore += hasil;
-      oldTotalWeight += weight;
-    }
-    if (oldTotalWeight > 0) oldScore = (oldScore / oldTotalWeight) * 100;
+    const oldPeriod = buildPeriodPayload(oldKpis, oldMonthKeys, mutation.old_unit_name, mutation.old_jabatan);
+    const newPeriod = buildPeriodPayload(newKpis, newMonthKeys, mutation.new_unit_name, mutation.new_jabatan);
 
-    let newScore = 0;
-    let newTotalWeight = 0;
-    for (const kpi of newKpis) {
-      const weight = parseFloat(kpi.weight) || 0;
-      const { hasil } = computeKpiYtdScores(kpi);
-      newScore += hasil;
-      newTotalWeight += weight;
-    }
-    if (newTotalWeight > 0) newScore = (newScore / newTotalWeight) * 100;
+    const totalMonths = Math.max(oldPeriod.months + newPeriod.months, 1);
+    oldPeriod.weight = oldPeriod.months / totalMonths;
+    newPeriod.weight = newPeriod.months / totalMonths;
 
-    const finalScore = (oldScore * oldWeight) + (newScore * newWeight);
+    const pencapaian =
+      oldPeriod.pencapaian * oldPeriod.weight + newPeriod.pencapaian * newPeriod.weight;
+    const skor = oldPeriod.skor * oldPeriod.weight + newPeriod.skor * newPeriod.weight;
+    const combinedScored = oldPeriod.scoredCount + newPeriod.scoredCount > 0;
+    const status = predikatFromPencapaian(pencapaian, combinedScored);
 
+    const [pegawaiRows] = await db.query('SELECT name FROM pegawai WHERE id = ? LIMIT 1', [
+      req.params.pegawai_id,
+    ]);
+    const employeeName = pegawaiRows[0]?.name || mutation.employee_name || '';
+
+    const combined = {
+      pencapaian,
+      skor,
+      status,
+      months: totalMonths,
+      label: `${oldPeriod.label} + ${newPeriod.label}`,
+      employee_name: employeeName,
+    };
+
+    res.setHeader('Cache-Control', 'no-store');
     res.json({
       hasMutation: true,
       mutation,
-      periods: {
-        old: { months: oldMonths, weight: oldWeight, score: oldScore, kpis: oldKpis },
-        new: { months: newMonths, weight: newWeight, score: newScore, kpis: newKpis },
-      },
-      finalScore,
+      employee_name: employeeName,
+      periods: { old: oldPeriod, new: newPeriod },
+      combined,
+      finalScore: skor,
     });
   } catch (error) {
     console.error('Score calculation error:', error.message);

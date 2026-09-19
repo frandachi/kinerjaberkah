@@ -3,7 +3,9 @@ require('dotenv').config({ quiet: true });
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const compression = require('compression');
 const path = require('path');
+const fs = require('fs');
 
 const db = require('./db');
 const checkLicense = require('./middleware/license');
@@ -21,6 +23,8 @@ const systemRoutes = require('./routes/system');
 const twoFARoutes = require('./routes/2fa');
 const makerCheckerRoutes = require('./routes/maker-checker');
 const pdfRoutes = require('./routes/pdf');
+const kpiCoachingRoutes = require('./routes/kpi-coaching');
+const kpiEvidenceRoutes = require('./routes/kpi-evidence');
 const httpsRedirect = require('./middleware/https-redirect');
 
 const app = express();
@@ -41,6 +45,9 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'fallback_secret_key_c
 // }
 
 app.use(httpsRedirect);
+
+// Gzip JSON/API responses (full KPI list can be multi-MB without compression)
+app.use(compression({ threshold: 1024 }));
 
 app.use(helmet({
   contentSecurityPolicy: {
@@ -83,9 +90,9 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     // and allow all localhost origins for development flexibility
     const isLocalDevOrigin =
-      Boolean(origin) &&
+      origin &&
       process.env.NODE_ENV !== 'production' &&
-      (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'));
+      (String(origin).startsWith('http://localhost:') || String(origin).startsWith('http://127.0.0.1:'));
     if (!origin || allowedOrigins.includes(origin) || isLocalDevOrigin) {
       callback(null, true);
     } else {
@@ -99,9 +106,42 @@ app.use(cors({
 }));
 
 app.use((req, res, next) => {
-  if (req.url.startsWith('/kinerjaberkah/api')) {
-    req.url = req.url.replace('/kinerjaberkah/api', '/api');
+  let url = req.url || '';
+  // Full public path (Apache may pass the original URI)
+  if (url.startsWith('/kinerjaberkah/api')) {
+    url = url.replace('/kinerjaberkah/api', '/api');
   }
+  // PassengerBaseURI=/kinerjaberkah/api strips the base; remaining path is e.g. /auth/captcha
+  if (!url.startsWith('/api')) {
+    const pathOnly = url.split('?')[0];
+    if (
+      pathOnly === '/health' ||
+      pathOnly.startsWith('/auth') ||
+      pathOnly.startsWith('/users') ||
+      pathOnly.startsWith('/kpis') ||
+      pathOnly.startsWith('/pegawai') ||
+      pathOnly.startsWith('/parameters') ||
+      pathOnly.startsWith('/mutations') ||
+      pathOnly.startsWith('/system') ||
+      pathOnly.startsWith('/2fa') ||
+      pathOnly.startsWith('/maker-checker') ||
+      pathOnly.startsWith('/pdf') ||
+      pathOnly.startsWith('/kpi-coaching') ||
+      pathOnly.startsWith('/kpi-evidence') ||
+      pathOnly.startsWith('/satuans') ||
+      pathOnly.startsWith('/targets') ||
+      pathOnly.startsWith('/objectives') ||
+      pathOnly.startsWith('/strategies') ||
+      pathOnly.startsWith('/perspectives') ||
+      pathOnly.startsWith('/units') ||
+      pathOnly.startsWith('/__assets') ||
+      pathOnly.startsWith('/jabatans') ||
+      pathOnly.startsWith('/leaders')
+    ) {
+      url = '/api' + url;
+    }
+  }
+  req.url = url;
   next();
 });
 
@@ -109,6 +149,32 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.use(accessLogger);
+
+// Serve UI assets via Node so DomaiNesia cannot force max-age=2592000 on raw .js/.css
+// Optional asset path via Node (prefer PHP /assets/nocache.php?f= on DomaiNesia —
+// hosting overwrites Cache-Control for URL paths ending in .js).
+const ASSETS_ROOT = [
+  path.resolve(__dirname, '..', 'asset-files'),
+  path.resolve(__dirname, '..', 'assets')
+].find((p) => {
+  try { return fs.existsSync(p); } catch (_) { return false; }
+}) || path.resolve(__dirname, '..', 'assets');
+const sendAssetNoCache = (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('X-KB-Cache', 'off');
+  next();
+};
+const assetStatic = express.static(ASSETS_ROOT, {
+  etag: false,
+  lastModified: false,
+  maxAge: 0,
+  index: false,
+  fallthrough: false
+});
+app.use('/api/__assets', sendAssetNoCache, assetStatic);
+app.use('/__assets', sendAssetNoCache, assetStatic);
 
 app.use('/api', apiLimiter);
 
@@ -143,6 +209,8 @@ app.use('/api/system', systemRoutes);
 app.use('/api/2fa', twoFARoutes);
 app.use('/api/maker-checker', makerCheckerRoutes);
 app.use('/api/pdf', pdfRoutes);
+app.use('/api/kpi-coaching', kpiCoachingRoutes);
+app.use('/api/kpi-evidence', kpiEvidenceRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Endpoint tidak ditemukan' });
@@ -157,7 +225,12 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 3001;
 
-if (require.main === module) {
+// Phusion Passenger (cPanel Node Selector): must listen on 'passenger', not TCP PORT.
+// Binding PORT while PM2 also uses it causes Passenger 500/timeouts after restart.
+if (typeof PhusionPassenger !== 'undefined') {
+  PhusionPassenger.configure({ autoInstall: false });
+  app.listen('passenger');
+} else if (require.main === module) {
   const server = app.listen(PORT, '127.0.0.1', () => {
     console.log(`Server running on 127.0.0.1:${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);

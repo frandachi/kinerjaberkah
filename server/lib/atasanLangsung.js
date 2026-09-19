@@ -186,6 +186,7 @@ module.exports = {
   classifyUnit,
   matchesPemimpinLevel,
   levelLabel,
+  parentUnitName,
   resolveAtasan,
   planAtasanSync,
   buildUsersByUnit,
