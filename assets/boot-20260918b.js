@@ -23,7 +23,7 @@
   // copy of index-CdyJlLvK/O (which caused "useAuth must be used within AuthProvider").
   const BASE = "/kinerjaberkah/assets/";
   const CANON = "index-CdyJlLvAQ.js";
-  const VERSION = "20260918q";
+  const VERSION = "20261001a";
   const LS_KEY = "kb_index_cache_v";
 
   const SHIM_SUFFIXES = [
@@ -32,7 +32,7 @@
   ];
   const SHIMS = SHIM_SUFFIXES.map((s) => BASE + "index-CdyJlLv" + s + ".js").concat([
     BASE + CANON,
-    BASE + "PenggunaAkses-CjLj6-E_.js",
+    BASE + "PenggunaAkses-UserFix01.js",
     BASE + "unit-kantor-DMQ7qF6z.js",
     BASE + "DataPegawai-B5fDELoN.js",
     BASE + "MutasiPegawai-BndmMgt3.js",

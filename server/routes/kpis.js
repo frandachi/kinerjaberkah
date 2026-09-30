@@ -2,7 +2,7 @@ const express = require('express');
 const db = require('../db');
 const authenticateToken = require('../middleware/auth');
 const authorizeRole = require('../middleware/authorize');
-const { auditMiddleware } = require('../middleware/audit');
+const { auditMiddleware, logActivity } = require('../middleware/audit');
 const { getGapSummary, getGapList, inferLevelUnit } = require('../lib/kpi-gap-utils');
 const { buildKpiRecords, getTemplateKpis } = require('../lib/kpi-template-engine');
 const { computeKpiYtdScores, computeYtdActual, normalizeUnit } = require('../lib/kpi-scoring');
@@ -24,7 +24,20 @@ const {
   listMasterKpis,
   getMasterDetail,
   parseJsonField: parseMasterJsonField,
+  ensureSchema: ensureMasterSchema,
+  ensureMasterParentRow,
+  groupKeyForName,
 } = require('../lib/kpi-master');
+const {
+  normSpace,
+  normalizeJabatan,
+  namesSimilar,
+  buildPegawaiIndex,
+  matchPegawai,
+  sanitizeKpi,
+  currentMonthIndexWib,
+  createMasterResolver,
+} = require('../lib/kpi-individu-import');
 
 function isMasterKpiId(id) {
   return typeof id === 'string' && /^KPI-[A-Z]+-\d+$/i.test(id);
@@ -816,6 +829,224 @@ router.post('/generate-templates', authenticateToken, authorizeRole('superadmin'
   } catch (error) {
     console.error('Generate KPI templates error:', error.message);
     res.status(500).json({ message: 'Gagal generate template KPI: ' + error.message });
+  }
+});
+
+/**
+ * Import KPI Individu dari template per pegawai (tanpa pilih unit/jabatan di layar).
+ * Body: { dryRun: boolean, entries: [{ key, sheet, rows, nama, npp, jabatan, unit_name, kpis: [...] }] }
+ */
+router.post('/import-individu', authenticateToken, authorizeRole('superadmin', 'admin'), async (req, res) => {
+  const dryRun = req.body?.dryRun !== false;
+  const entries = Array.isArray(req.body?.entries) ? req.body.entries : [];
+  if (!entries.length) return res.status(400).json({ message: 'Tidak ada data pegawai di file' });
+  if (entries.length > 1000) return res.status(400).json({ message: 'Maksimal 1000 pegawai per upload' });
+
+  try {
+    await ensureKpiFormColumns(db);
+    await ensureMasterSchema(db);
+    const [pegawaiRows] = await db.query('SELECT id, name, npp, jabatan, unit_name FROM pegawai');
+    const index = buildPegawaiIndex(pegawaiRows);
+
+    const seenPegawai = new Map();
+    const seenPair = new Map();
+    const maxMonthIdx = currentMonthIndexWib();
+    const matches = entries.map((entry) => matchPegawai(index, entry));
+    // Blok yang jabatannya sama dengan data pegawai diproses lebih dulu, agar menang saat duplikat/konflik.
+    const jabatanFits = (i) => {
+      const p = matches[i].pegawai;
+      return p && entries[i].jabatan && normalizeJabatan(entries[i].jabatan) === normalizeJabatan(p.jabatan) ? 0 : 1;
+    };
+    const order = entries.map((_, i) => i).sort((a, b) => jabatanFits(a) - jabatanFits(b) || a - b);
+    const results = new Array(entries.length);
+    for (const i of order) results[i] = evaluate(entries[i], i, matches[i]);
+
+    function evaluate(entry, i, match) {
+      const kpis = (Array.isArray(entry.kpis) ? entry.kpis : [])
+        .map((k, idx) => sanitizeKpi(k, idx, maxMonthIdx))
+        .filter(Boolean);
+      const droppedMonths = [...new Set(kpis.flatMap((k) => k.futureDropped))];
+      const base = {
+        key: entry.key ?? i,
+        sheet: normSpace(entry.sheet),
+        rows: normSpace(entry.rows),
+        nama: normSpace(entry.nama),
+        npp: normSpace(entry.npp),
+        jabatan: normSpace(entry.jabatan),
+        kpiCount: kpis.length,
+        weightTotal: Math.round(kpis.reduce((s, k) => s + k.weight, 0) * 100) / 100,
+        warnings: [],
+        kpis,
+      };
+      if (!kpis.length) return { ...base, status: 'invalid', message: 'Tidak ada baris KPI' };
+
+      if (!match.pegawai) return { ...base, status: 'unmatched', message: match.reason };
+
+      const p = match.pegawai;
+      const pegawai = { id: p.id, name: p.name, npp: p.npp, jabatan: normSpace(p.jabatan), unit_name: normSpace(p.unit_name) };
+      if (!pegawai.jabatan || !pegawai.unit_name) {
+        return { ...base, pegawai, status: 'invalid', message: 'Data pegawai belum punya unit/jabatan' };
+      }
+      if (seenPegawai.has(p.id)) {
+        return { ...base, pegawai, status: 'duplicate', message: `Pegawai sama dengan sheet "${seenPegawai.get(p.id)}"` };
+      }
+      const pairKey = `${pegawai.unit_name.toLowerCase()}|${pegawai.jabatan.toLowerCase()}`;
+      if (seenPair.has(pairKey)) {
+        return {
+          ...base,
+          pegawai,
+          status: 'conflict',
+          message: `Unit & jabatan sama dengan ${seenPair.get(pairKey)}; KPI individu disimpan per unit+jabatan`,
+        };
+      }
+      seenPegawai.set(p.id, base.sheet || base.nama);
+      seenPair.set(pairKey, p.name);
+
+      if (match.via === 'npp' && base.nama && !namesSimilar(base.nama, p.name)) {
+        base.warnings.push(`Nama di file "${base.nama}" berbeda dengan data pegawai`);
+      }
+      if (base.jabatan && normalizeJabatan(base.jabatan) !== normalizeJabatan(pegawai.jabatan)) {
+        base.warnings.push(`Jabatan di file "${base.jabatan}" berbeda; dipakai jabatan pegawai`);
+      }
+      if (Math.abs(base.weightTotal - 100) > 0.5) {
+        base.warnings.push(`Total bobot ${base.weightTotal}`);
+      }
+      if (droppedMonths.length) {
+        base.warnings.push(`Realisasi ${droppedMonths.join(', ')} diabaikan (bulan belum berjalan); target tetap disimpan`);
+      }
+      return { ...base, pegawai, matchedBy: match.via, status: 'ready' };
+    }
+
+    const ready = results.filter((r) => r.status === 'ready');
+    for (const r of ready) {
+      const [ex] = await db.query(
+        "SELECT COUNT(*) AS n, GROUP_CONCAT(DISTINCT NULLIF(pic, '') SEPARATOR ', ') AS pics FROM kpis WHERE unit_name = ? AND jabatan = ? AND COALESCE(unit_type, '') = 'pegawai'",
+        [r.pegawai.unit_name, r.pegawai.jabatan]
+      );
+      r.existingCount = Number(ex[0]?.n) || 0;
+      if (r.existingCount) {
+        const pics = ex[0].pics ? ` (PIC: ${ex[0].pics})` : '';
+        r.warnings.push(`Menimpa ${r.existingCount} KPI yang sudah ada${pics}`);
+      }
+    }
+
+    const [masterRows] = await db.query('SELECT code, name, perspective, unit, polarity, match_names FROM master_kpis');
+    const [masterIds] = await db.query("SELECT id FROM kpis WHERE id LIKE 'KPI-%'");
+    const masters = createMasterResolver(masterRows, masterIds.map((row) => row.id));
+    const parentIds = new Set(masterIds.map((row) => row.id));
+    const reusedCodes = new Map();
+    const firstSeen = new Set();
+    for (const r of ready) {
+      r.masterNew = 0;
+      r.masterReused = 0;
+      r.kpis = r.kpis.map((k) => {
+        const m = masters.resolve(k);
+        if (!m) return k;
+        if (m.isNew && !firstSeen.has(m.code)) {
+          firstSeen.add(m.code);
+          r.masterNew += 1;
+        } else {
+          r.masterReused += 1;
+          if (!m.isNew) reusedCodes.set(m.code, m);
+        }
+        return { ...k, name: m.name, unit: m.unit || k.unit, polarity: m.polarity || k.polarity, kpi_code: m.code };
+      });
+    }
+
+    let inserted = 0;
+    const touchedCodes = new Set();
+    if (!dryRun && ready.length) {
+      const conn = await db.getConnection();
+      try {
+        await conn.beginTransaction();
+        const createdBy = req.user?.username || req.user?.id || null;
+        const needParent = [...masters.created, ...[...reusedCodes.values()].filter((m) => !parentIds.has(m.code))];
+        for (const m of needParent) {
+          await ensureMasterParentRow(conn, {
+            code: m.code,
+            name: m.name,
+            perspective: m.perspective,
+            unit: m.unit,
+            polarity: m.polarity,
+            matchNames: [m.name],
+            matchKeys: [groupKeyForName(m.name)],
+            description: `Master KPI ${m.name} (${m.code}) — akumulasi seluruh unit/jabatan`,
+            objective: `Konsolidasi ${m.name}`,
+          });
+        }
+        for (const r of ready) {
+          const [oldCodes] = await conn.query(
+            "SELECT DISTINCT kpi_code FROM kpis WHERE unit_name = ? AND jabatan = ? AND COALESCE(unit_type, '') = 'pegawai' AND kpi_code IS NOT NULL",
+            [r.pegawai.unit_name, r.pegawai.jabatan]
+          );
+          oldCodes.forEach((row) => touchedCodes.add(row.kpi_code));
+          await conn.query(
+            "DELETE FROM kpis WHERE unit_name = ? AND jabatan = ? AND COALESCE(unit_type, '') = 'pegawai'",
+            [r.pegawai.unit_name, r.pegawai.jabatan]
+          );
+          const values = r.kpis.map((k, i) => {
+            if (k.kpi_code) touchedCodes.add(k.kpi_code);
+            return [
+              `kpi_${Date.now()}_${inserted + i}_${Math.floor(Math.random() * 1e6)}`,
+              k.kpi_code || null, k.kpi_code || null,
+              k.name, k.perspective, k.unit, k.polarity, k.target, k.actual, k.weight,
+              r.pegawai.unit_name, r.pegawai.jabatan,
+              JSON.stringify(k.monthly_data), JSON.stringify(k.monthly_target),
+              'pegawai', 'Draft', r.pegawai.name, k.sort_order, createdBy,
+            ];
+          });
+          await conn.query(
+            'INSERT INTO kpis (id, kpi_code, parent_kpi_id, name, perspective, unit, polarity, target, actual, weight, unit_name, jabatan, monthly_data, monthly_target, unit_type, status, pic, sort_order, created_by) VALUES ?',
+            [values]
+          );
+          inserted += values.length;
+          r.status = 'saved';
+        }
+        await conn.commit();
+      } catch (err) {
+        await conn.rollback();
+        throw err;
+      } finally {
+        conn.release();
+      }
+      for (const code of touchedCodes) {
+        try {
+          await aggregateMasterFromChildren(db, code);
+        } catch (err) {
+          console.error('Import KPI individu: agregasi master gagal', code, err.message);
+        }
+      }
+    }
+
+    const count = (s) => results.filter((r) => r.status === s).length;
+    const summary = {
+      total: results.length,
+      ready: count('ready') + count('saved'),
+      saved: count('saved'),
+      unmatched: count('unmatched'),
+      conflict: count('conflict') + count('duplicate'),
+      invalid: count('invalid'),
+      kpis: dryRun ? ready.reduce((s, r) => s + r.kpiCount, 0) : inserted,
+      masterNew: masters.created.length,
+      masterReused: reusedCodes.size,
+    };
+    if (!dryRun) {
+      logActivity(req.user.id, 'IMPORT_KPI_INDIVIDU', {
+        summary,
+        saved: results
+          .filter((r) => r.status === 'saved')
+          .map((r) => ({ npp: r.pegawai.npp, unit_name: r.pegawai.unit_name, jabatan: r.pegawai.jabatan, kpis: r.kpiCount })),
+      }, req.ip);
+    }
+    res.json({
+      dryRun,
+      summary,
+      newMasters: masters.created.map(({ code, name, perspective }) => ({ code, name, perspective })),
+      results: results.map(({ kpis, ...r }) => r),
+    });
+  } catch (error) {
+    console.error('Import KPI individu error:', error.message);
+    res.status(500).json({ message: 'Gagal import KPI individu: ' + error.message });
   }
 });
 

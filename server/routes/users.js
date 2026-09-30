@@ -219,23 +219,40 @@ router.post('/', authenticateToken, authorizeRole('superadmin'), auditMiddleware
       return res.status(400).json({ message: 'Password wajib diisi minimal 8 karakter' });
     }
 
-    const [existingUsers] = await db.query('SELECT id FROM users WHERE username = ? OR npp = ?', [username, npp || username]);
-    if (existingUsers.length > 0) {
-      return res.status(409).json({ message: 'Username atau NPP sudah terdaftar' });
+    const cleanUsername = String(username).trim();
+    const cleanNpp = String(npp || '').trim() || cleanUsername;
+
+    const [sameUsername] = await db.query('SELECT name, npp FROM users WHERE username = ? LIMIT 1', [cleanUsername]);
+    if (sameUsername.length > 0) {
+      const owner = sameUsername[0];
+      return res.status(409).json({
+        message: `Username "${cleanUsername}" sudah dipakai oleh ${owner.name || '-'} (NPP ${owner.npp || '-'}). Gunakan username lain atau edit user tersebut.`,
+      });
+    }
+    const [sameNpp] = await db.query('SELECT name, username FROM users WHERE npp = ? LIMIT 1', [cleanNpp]);
+    if (sameNpp.length > 0) {
+      const owner = sameNpp[0];
+      return res.status(409).json({
+        message: `NPP "${cleanNpp}" sudah punya akun: ${owner.name || '-'} (username ${owner.username || '-'}). Edit user tersebut bila perlu.`,
+      });
     }
 
     const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const id = `user_${Date.now()}`;
-    const pegawai_id = `peg_${Date.now()}`;
 
-    await db.query(
-      'INSERT INTO pegawai (id, name, npp, jabatan, unit_name) VALUES (?, ?, ?, ?, ?)',
-      [pegawai_id, name || '', npp || username || '', jabatan || '', unit_name || '']
-    );
+    const [existingPegawai] = await db.query('SELECT id FROM pegawai WHERE npp = ? LIMIT 1', [cleanNpp]);
+    let pegawai_id = existingPegawai[0]?.id;
+    if (!pegawai_id) {
+      pegawai_id = `peg_${Date.now()}`;
+      await db.query(
+        'INSERT INTO pegawai (id, name, npp, jabatan, unit_name) VALUES (?, ?, ?, ?, ?)',
+        [pegawai_id, name || '', cleanNpp, jabatan || '', unit_name || '']
+      );
+    }
 
     await db.query(
       'INSERT INTO users (id, pegawai_id, name, username, password, jabatan, unit_name, role, supervisi_approval, npp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, pegawai_id, name || '', username || '', hashedPassword, jabatan || '', unit_name || '', role || 'user', supervisi_approval || '', npp || username || '']
+      [id, pegawai_id, name || '', cleanUsername, hashedPassword, jabatan || '', unit_name || '', role || 'user', supervisi_approval || '', cleanNpp]
     );
 
     const [users] = await db.query(
