@@ -237,6 +237,9 @@ async function ensureMasterCodeForKpi(db, { name, perspective, unit, polarity } 
   const persp = normalizePerspectiveKey(perspective);
   const displayName = key === 'laba bersih' ? RESERVED_CODES['KPI-FIN-01'].name : stripNameSymbols(name);
 
+  // Master yang sudah ada tidak boleh ditimpa satuan/polaritas dari KPI individu.
+  if (code && (await getMasterUnit(db, code))) return code;
+
   if (!code) {
     const { byCode } = await loadCatalogFromDb(db);
     const prefix = PERSPECTIVE_PREFIX[persp] || 'GEN';
@@ -260,6 +263,13 @@ async function ensureMasterCodeForKpi(db, { name, perspective, unit, polarity } 
   });
 
   return code;
+}
+
+/** Satuan master KPI (percentage/currency/score/number), atau null bila master tidak ada. */
+async function getMasterUnit(db, code) {
+  if (!code) return null;
+  const [rows] = await db.query('SELECT unit FROM master_kpis WHERE code = ? LIMIT 1', [code]);
+  return rows.length && rows[0].unit ? rows[0].unit : null;
 }
 
 async function ensureMasterParentRow(db, meta) {
@@ -693,6 +703,7 @@ module.exports = {
   normalizePerspectiveKey,
   resolveMasterCodeForName,
   ensureMasterCodeForKpi,
+  getMasterUnit,
   ensureSchema,
   ensureMasterParentRow,
   buildMasterPlanFromDb,

@@ -15,6 +15,7 @@ function c(t) {
  * - Target 0 & Realisasi 0 → 100% (Maximize & Minimize)
  * - Maximize: (Realisasi ÷ Target) × 100; Realisasi 0 → 0%; Target 0 & Realisasi ≠ 0 → 0%
  * - Minimize: (Target ÷ Realisasi) × 100; Realisasi 0 → 100%
+ * - Target negatif (Maximize/Minimize): (1 + selisih ÷ |Target|) × 100
  */
 function b(t, i, l = 'maximize', s = {}) {
   const a = parseFloat(t);
@@ -25,6 +26,11 @@ function b(t, i, l = 'maximize', s = {}) {
   const u = s.upperRatio ?? 1.1;
 
   if (e === 0 && a === 0) return 100;
+
+  if (e < 0 && (n === 'maximize' || n === 'minimize')) {
+    const g = n === 'maximize' ? a - e : e - a;
+    return (1 + g / Math.abs(e)) * 100;
+  }
 
   if (n === 'minimize' || n === 'faster') {
     if (a === 0) return 100;

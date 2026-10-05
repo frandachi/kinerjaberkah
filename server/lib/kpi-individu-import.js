@@ -137,6 +137,44 @@ function currentMonthIndexWib(now = new Date()) {
 }
 
 /**
+ * Bulan terakhir yang realisasinya boleh diterima: bulan lalu (bulan berjalan belum tutup buku).
+ * Di bulan Januari yang diunggah adalah realisasi tahun lalu, jadi semua bulan diterima.
+ */
+function lastClosedMonthIndexWib(now = new Date()) {
+  const m = currentMonthIndexWib(now) - 1;
+  return m < 0 ? 11 : m;
+}
+
+function lastFilledActual(monthly_data) {
+  const filled = MONTHS.filter((m) => monthly_data[m] !== undefined);
+  const actual = filled.length ? Number(monthly_data[filled[filled.length - 1]]) : 0;
+  return Math.round(actual * 100) / 100;
+}
+
+/**
+ * Bulan-bulan paling akhir yang realisasinya 0 untuk SEMUA KPI dalam satu file dianggap belum diisi
+ * (sel rumus Excel yang menghasilkan 0), lalu dibuang. Berhenti di bulan pertama yang punya nilai ≠ 0.
+ * @returns {string[]} bulan yang dibuang
+ */
+function trimTrailingZeroMonths(kpis) {
+  const dropped = [];
+  for (let i = MONTHS.length - 1; i >= 0; i -= 1) {
+    const m = MONTHS[i];
+    const values = kpis.map((k) => k.monthly_data[m]).filter((v) => v !== undefined);
+    if (!values.length) continue;
+    if (values.some((v) => Number(v) !== 0)) break;
+    dropped.unshift(m);
+  }
+  if (dropped.length) {
+    kpis.forEach((k) => {
+      dropped.forEach((m) => delete k.monthly_data[m]);
+      k.actual = lastFilledActual(k.monthly_data);
+    });
+  }
+  return dropped;
+}
+
+/**
  * @param {number} [maxMonthIdx] realisasi untuk bulan setelah indeks ini diabaikan
  *   (bulan yang belum berjalan); target bulanan tetap disimpan.
  */
@@ -151,8 +189,6 @@ function sanitizeKpi(raw, idx, maxMonthIdx = 11) {
   const futureDropped = MONTHS.slice(maxMonthIdx + 1).filter((m) => monthly_data[m] !== undefined);
   futureDropped.forEach((m) => delete monthly_data[m]);
   const monthly_target = cleanMonthly(raw.monthly_target);
-  const filled = MONTHS.filter((m) => monthly_data[m] !== undefined);
-  const actual = filled.length ? Number(monthly_data[filled[filled.length - 1]]) : 0;
   return {
     name,
     unit,
@@ -162,9 +198,60 @@ function sanitizeKpi(raw, idx, maxMonthIdx = 11) {
     target: normSpace(raw.target).slice(0, 255),
     monthly_data,
     monthly_target,
-    actual: Math.round(actual * 100) / 100,
+    actual: lastFilledActual(monthly_data),
     sort_order: idx + 1,
     futureDropped,
+  };
+}
+
+const JUTA = 1000000;
+
+function currencyValues(kpi) {
+  const vals = [...Object.values(kpi.monthly_data || {}), ...Object.values(kpi.monthly_target || {}), kpi.actual, kpi.target];
+  return vals.map((v) => (v === '' || v == null ? NaN : Number(v))).filter(Number.isFinite);
+}
+
+function medianOf(values) {
+  if (!values.length) return 0;
+  const s = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+/** Median |nilai| bukan nol sebuah KPI currency (0 bila kosong). */
+function currencyMagnitude(kpi) {
+  return medianOf(currencyValues(kpi).map(Math.abs).filter((v) => v > 0));
+}
+
+/**
+ * Satuan master currency = Juta Rupiah. Label "Juta Rupiah" di template tidak bisa dipercaya
+ * (file Capem berlabel juta tapi isinya Rupiah penuh), sedangkan agregat besar dalam juta
+ * (mis. 3.468.412 juta) sah menembus 1.000.000. Rupiah penuh bila:
+ * - ada nilai ≥ 1 miliar (tidak mungkin dalam juta), atau
+ * - ≥ 90% nilai ≥ 1 juta (nilai kumulatif dalam juta biasanya baru menembus 1.000.000 di
+ *   pertengahan tahun) DAN, bila ada pembanding (median KPI kode master sama milik pegawai lain),
+ *   hasil ÷ 1 juta lebih dekat (skala log) ke pembanding.
+ */
+function looksLikeFullRupiah(kpi, peerMagnitude = 0) {
+  const vals = currencyValues(kpi).map(Math.abs).filter((v) => v > 0);
+  if (!vals.length || Math.max(...vals) < JUTA) return false;
+  if (Math.max(...vals) >= JUTA * 1000) return true;
+  if (vals.filter((v) => v >= JUTA).length / vals.length < 0.9) return false;
+  if (!(peerMagnitude > 0)) return true;
+  const m = medianOf(vals);
+  const dist = (x) => Math.abs(Math.log10(x) - Math.log10(peerMagnitude));
+  return dist(m / JUTA) < dist(m);
+}
+
+function rupiahToJutaKpi(kpi) {
+  const conv = (v) => String(Math.round((Number(v) / JUTA) * 10000) / 10000);
+  const mapMonthly = (obj) => Object.fromEntries(Object.entries(obj || {}).map(([m, v]) => [m, conv(v)]));
+  const t = kpi.target === '' || kpi.target == null ? NaN : Number(kpi.target);
+  return {
+    monthly_data: mapMonthly(kpi.monthly_data),
+    monthly_target: mapMonthly(kpi.monthly_target),
+    actual: Math.round((Number(kpi.actual) || 0) / JUTA * 10000) / 10000,
+    target: Number.isFinite(t) ? conv(t) : kpi.target ?? '',
   };
 }
 
@@ -253,6 +340,12 @@ module.exports = {
   matchPegawai,
   sanitizeKpi,
   currentMonthIndexWib,
+  lastClosedMonthIndexWib,
+  trimTrailingZeroMonths,
+  looksLikeFullRupiah,
+  currencyMagnitude,
+  medianOf,
+  rupiahToJutaKpi,
   masterNameKey,
   createMasterResolver,
 };

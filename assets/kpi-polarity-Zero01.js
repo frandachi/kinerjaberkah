@@ -17,6 +17,10 @@ function b(t, i, l = 'maximize', s = {}) {
   const n = c(l);
   const m = s.lowerRatio ?? 0.9;
   const u = s.upperRatio ?? 1.1;
+  if (e < 0 && (n === 'maximize' || n === 'minimize')) {
+    const g = n === 'maximize' ? a - e : e - a;
+    return (1 + g / Math.abs(e)) * 100;
+  }
   if (e === 0) {
     if (a === 0) return 100;
     if (n === 'minimize' || n === 'faster') return 0;

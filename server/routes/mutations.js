@@ -8,6 +8,7 @@ const {
   monthKeysInclusive,
   formatMonthRangeLabel,
   summarizeKpiSet,
+  predikatFromSkor,
   predikatFromPencapaian,
 } = require('../lib/kpi-scoring');
 const { importMutationFromBuffer } = require('../lib/import-mutation-kpi');

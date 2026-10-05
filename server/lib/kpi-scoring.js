@@ -92,14 +92,42 @@ function monthTargetValue(monthlyTarget, month, annualTarget) {
   return Number.isNaN(fallback) ? 0 : fallback;
 }
 
+function filledMonths(monthlyObj) {
+  if (!monthlyObj || typeof monthlyObj !== 'object') return [];
+  return MONTHS.filter((m) => {
+    const raw = monthlyObj[m];
+    return raw !== undefined && raw !== null && raw !== '' && !Number.isNaN(parseFloat(raw));
+  });
+}
+
+function sumMonths(monthlyObj, months) {
+  return months.reduce((sum, m) => {
+    const val = parseFloat(monthlyObj?.[m]);
+    return sum + (Number.isNaN(val) ? 0 : val);
+  }, 0);
+}
+
+// Nominal (Rp/angka): YTD realisasi ÷ YTD target pada bulan yang sama-sama terisi.
+function computeYtdTarget(unitType, monthlyData, monthlyTarget) {
+  if (!isSumTargetUnit(unitType)) return computeAnnualTargetFromMonthly(unitType, monthlyTarget);
+  const dataMonths = filledMonths(monthlyData);
+  if (!dataMonths.length) return 0;
+  const matched = dataMonths.filter((m) => filledMonths(monthlyTarget).includes(m));
+  return sumMonths(monthlyTarget, matched.length ? matched : dataMonths);
+}
+
 function computePencapaianTotal(monthlyData, monthlyTarget, unitType, polarity = 'maximize', annualTarget) {
   const mode = normalizePolarity(polarity);
   if (isSumTargetUnit(unitType)) {
-    const actual = sumMonthlyValues(monthlyData);
-    const target = hasFilledMonth(monthlyTarget)
-      ? sumMonthlyValues(monthlyTarget)
-      : (parseFloat(annualTarget) || 0);
-    return computePencapaianByPolarity(actual, target, mode);
+    const dataMonths = filledMonths(monthlyData);
+    if (!dataMonths.length) return 0;
+    const targetMonths = new Set(filledMonths(monthlyTarget));
+    const matched = dataMonths.filter((m) => targetMonths.has(m));
+    if (matched.length) {
+      return computePencapaianByPolarity(sumMonths(monthlyData, matched), sumMonths(monthlyTarget, matched), mode);
+    }
+    const annual = parseFloat(annualTarget);
+    return computePencapaianByPolarity(sumMonths(monthlyData, dataMonths), Number.isNaN(annual) ? 0 : annual, mode);
   }
   let sum = 0;
   let count = 0;
@@ -115,12 +143,41 @@ function computePencapaianTotal(monthlyData, monthlyTarget, unitType, polarity =
   return count > 0 ? sum / count : 0;
 }
 
-function computeIndeksFromPencapaian(pencapaianPercent) {
+function isLearningGrowth(perspective) {
+  return /learning|growth|pembelajaran|\blng\b/i.test(String(perspective || ''));
+}
+
+// Skala B (Maximize satuan indeks/skor di luar Learning & Growth, Minimize, Faster is Better): skor 3 baru di 100–<110%.
+// Skala C (Maximize perspektif Learning & Growth, semua satuan): skor 4 di 80–100%.
+function scoreScale(polarity, unitType, perspective) {
+  const mode = normalizePolarity(polarity);
+  if (mode === 'minimize' || mode === 'faster') return 'B';
+  if (mode === 'maximize' && isLearningGrowth(perspective)) return 'C';
+  if (mode === 'maximize' && unitType === 'score') return 'B';
+  return 'A';
+}
+
+function computeIndeksFromPencapaian(pencapaianPercent, polarity = 'maximize', unitType = 'percentage', perspective = '') {
   const p = parseFloat(pencapaianPercent);
   if (Number.isNaN(p)) return 0;
+  const scale = scoreScale(polarity, unitType, perspective);
+  if (scale === 'B') {
+    if (p < 80) return 1;
+    if (p < 100) return 2;
+    if (p < 110) return 3;
+    if (p <= 120) return 4;
+    return 5;
+  }
+  if (scale === 'C') {
+    if (p < 40) return 1;
+    if (p < 60) return 2;
+    if (p < 80) return 3;
+    if (p <= 100) return 4;
+    return 5;
+  }
   if (p < 60) return 1;
   if (p < 80) return 2;
-  if (p <= 100) return 3;
+  if (p < 100) return 3;
   if (p <= 110) return 4;
   return 5;
 }
@@ -129,18 +186,38 @@ function resolveIndeks(kpi, pencapaianPercent) {
   const hasManual = kpi.manual_indeks !== undefined && kpi.manual_indeks !== null && kpi.manual_indeks !== '';
   if (hasManual) {
     const manual = parseFloat(kpi.manual_indeks);
-    return Number.isNaN(manual) ? 0 : manual;
+    if (manual >= 1) return manual;
   }
-  return computeIndeksFromPencapaian(pencapaianPercent);
+  return computeIndeksFromPencapaian(pencapaianPercent, kpi.polarity, normalizeUnit(kpi.unit), kpi.perspective);
+}
+
+const PREDIKAT_BY_SKOR = ['Kurang', 'Cukup', 'Baik', 'Sangat Baik', 'Istimewa'];
+
+function predikatFromIndeks(indeks) {
+  const i = Math.round(parseFloat(indeks));
+  if (Number.isNaN(i) || i <= 0) return '-';
+  return PREDIKAT_BY_SKOR[Math.min(i, 5) - 1];
+}
+
+// Skor Akhir (Σ bobot × skor) dibulatkan: <1,5 Kurang … ≥4,5 Istimewa.
+function predikatFromSkor(skor, scored = true) {
+  if (!scored) return '-';
+  const s = parseFloat(skor);
+  if (Number.isNaN(s) || s <= 0) return '-';
+  if (s < 1.5) return 'Kurang';
+  if (s < 2.5) return 'Cukup';
+  if (s < 3.5) return 'Baik';
+  if (s < 4.5) return 'Sangat Baik';
+  return 'Istimewa';
 }
 
 function normalizeUnit(unit) {
   if (['percentage', 'currency', 'score', 'number'].includes(unit)) return unit;
   const u = (unit || '').toLowerCase();
-  if (u === '%' || u.includes('persen')) return 'percentage';
+  if (u === '%' || u.includes('persen') || u.includes('percent')) return 'percentage';
   if (u.includes('rp') || u.includes('rupiah') || u.includes('juta')) return 'currency';
   if (u.includes('indeks') || u.includes('skor')) return 'score';
-  if (u.includes('angka')) return 'number';
+  if (u.includes('angka') || u.includes('bilangan') || u.includes('jumlah')) return 'number';
   return 'percentage';
 }
 
@@ -198,8 +275,8 @@ function predikatFromPencapaian(pencapaianPercent, scored = true) {
   if (Number.isNaN(p)) return '-';
   if (p < 60) return 'Kurang';
   if (p < 80) return 'Cukup';
-  if (p <= 100) return 'Baik';
-  if (p <= 110) return 'Baik Sekali';
+  if (p < 100) return 'Baik';
+  if (p <= 110) return 'Sangat Baik';
   return 'Istimewa';
 }
 
@@ -210,7 +287,7 @@ function computeKpiYtdScores(kpi, options = {}) {
   const monthlyTarget = pickMonthly(kpi.monthly_target, months);
   const monthlyData = pickMonthly(kpi.monthly_data, months);
   const polarity = normalizePolarity(kpi.polarity);
-  const targetNum = computeAnnualTargetFromMonthly(unitType, monthlyTarget);
+  const targetNum = computeYtdTarget(unitType, monthlyData, monthlyTarget);
   const actualNum = computeYtdActual(unitType, monthlyData);
   const scored = hasFilledMonth(monthlyData);
   const pencapaian = scored
@@ -236,7 +313,7 @@ function summarizeKpiSet(kpis = [], months = null) {
     if (!scored) continue;
     const w = weight > 0 ? weight : 1;
     scoredWeight += w;
-    weightedPencapaian += w * Math.min(pencapaian, 120);
+    weightedPencapaian += w * Math.max(0, Math.min(pencapaian, 120));
     scoredCount += 1;
     if (pencapaian >= 100) tercapai += 1;
   }
@@ -263,6 +340,9 @@ module.exports = {
   monthKeysInclusive,
   formatMonthRangeLabel,
   predikatFromPencapaian,
+  predikatFromIndeks,
+  predikatFromSkor,
+  scoreScale,
   summarizeKpiSet,
   normalizeUnit,
   computeHasil: (bobot, indeks) => (parseFloat(bobot) || 0) * ((parseFloat(indeks) || 0) / 100),

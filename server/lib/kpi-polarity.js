@@ -11,6 +11,8 @@ function normalizePolarity(polarity) {
  * - Target 0 & Realisasi 0 → 100% (Maximize & Minimize)
  * - Maximize: (Realisasi ÷ Target) × 100; Realisasi 0 → 0%; Target 0 & Realisasi ≠ 0 → 0%
  * - Minimize: (Target ÷ Realisasi) × 100; Realisasi 0 → 100%
+ * - Target negatif (Maximize/Minimize): (1 + selisih ÷ |Target|) × 100, selisih = Realisasi − Target
+ *   untuk Maximize dan Target − Realisasi untuk Minimize. Realisasi = Target → 100%.
  */
 function computePencapaianByPolarity(actual, target, polarity = 'maximize', options = {}) {
   const a = parseFloat(actual);
@@ -22,6 +24,11 @@ function computePencapaianByPolarity(actual, target, polarity = 'maximize', opti
   const upperRatio = options.upperRatio ?? 1.1;
 
   if (t === 0 && a === 0) return 100;
+
+  if (t < 0 && (mode === 'maximize' || mode === 'minimize')) {
+    const gap = mode === 'maximize' ? a - t : t - a;
+    return (1 + gap / Math.abs(t)) * 100;
+  }
 
   if (mode === 'minimize' || mode === 'faster') {
     if (a === 0) return 100;

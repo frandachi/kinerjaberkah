@@ -23,7 +23,7 @@
   // copy of index-CdyJlLvK/O (which caused "useAuth must be used within AuthProvider").
   const BASE = "/kinerjaberkah/assets/";
   const CANON = "index-CdyJlLvAQ.js";
-  const VERSION = "20261001a";
+  const VERSION = "20261005i";
   const LS_KEY = "kb_index_cache_v";
 
   const SHIM_SUFFIXES = [
@@ -36,12 +36,30 @@
     BASE + "unit-kantor-DMQ7qF6z.js",
     BASE + "DataPegawai-B5fDELoN.js",
     BASE + "MutasiPegawai-BndmMgt3.js",
-    BASE + "KPIIndividu-Eform16.js",
+    BASE + "KPIIndividu-MonthLine03.js",
     BASE + "PageHeader-DdzXL2rh.js",
     BASE + "Login-OMbfbvvI.js",
     BASE + "UploadKpiMutasi-Manual01.js",
     BASE + "FileEvidence-Manual01.js",
-    BASE + "KPIIndividu-Eform16.js",
+    BASE + "KPIIndividu-MonthLine03.js",
+    BASE + "kpi-polarity-Zero01.js",
+    BASE + "kpi-polarity-Zero02.js",
+    BASE + "orgLevel-DzZJ66Xo.js",
+    BASE + "Dashboard-Score01.js",
+    BASE + "LaporanAnalisis-Export01.js",
+    BASE + "KpiIndividuExport-Card01.js",
+    BASE + "kpi-individu-export-Core01.js",
+    BASE + "kpi-scoring-Zero01.js",
+    BASE + "kpi-scoring-Zero03.js",
+    BASE + "kpi-summary-zp-GQLPf.js",
+    BASE + "kpi-summary-Zero03.js",
+    BASE + "KpiIndeksPredikatTable-Fit01.js",
+    BASE + "KonsolidasiUnit-Wrap01.js",
+    BASE + "Scorecard-B7oCx77H.js",
+    BASE + "KPIUnit-Score01.js",
+    BASE + "OKRJabatan-PerfList01.js",
+    BASE + "Panduan-D7yiiD2P.js",
+    BASE + "KpiManagement-Catalog07.js",
     BASE + "index-CdyJlLvAQ.js",
   ]);
 

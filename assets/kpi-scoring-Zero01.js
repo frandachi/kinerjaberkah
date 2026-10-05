@@ -63,21 +63,23 @@ function V(n,t,r,e="maximize"){
   if(N(t).length>0)return p(w(r,n),F(r,t),u);
   return B(n);
 }
-function Y(n){const t=parseFloat(n);return Number.isNaN(t)||t<=0?0:t<60?1:t<80?2:t<=100?3:t<=110?4:5}
+// Skala B (Maximize indeks/skor, Minimize, Faster): 3 baru tercapai di 100–<110%.
+function kbLG(ps){return/learning|growth|pembelajaran|\blng\b/i.test(String(ps||""))}function kbScale(r,u,ps){const p=A(r);return p==="minimize"||p==="faster"?"B":p==="maximize"&&kbLG(ps)?"C":p==="maximize"&&u==="score"?"B":"A"}
+function Y(n,r,u,ps){const t=parseFloat(n);if(Number.isNaN(t)||t<=0)return 0;const sc=kbScale(r,u,ps);return sc==="B"?(t<80?1:t<100?2:t<110?3:t<=120?4:5):sc==="C"?(t<40?1:t<60?2:t<80?3:t<=100?4:5):(t<60?1:t<80?2:t<100?3:t<=110?4:5)}
 function E(n,t){const r=parseFloat(n)||0,e=parseFloat(t)||0;return r*(e/100)}
-function H(n,t){
+function H(n,t,u){
   if(n.manual_indeks!==void 0&&n.manual_indeks!==null&&n.manual_indeks!==""){
     const e=parseFloat(n.manual_indeks);
-    return Number.isNaN(e)?0:e;
+    if(e>=1)return e;
   }
-  return Y(t);
+  return Y(t,n.polarity,u,n.perspective);
 }
 function R(n,t){
-  const r=parseFloat(n.weight)||0,e=n.monthly_target||{},u=n.monthly_data||{},s=A(n.polarity),c=F(t,e),a=(d(t)?S(t,u,e):c),o=w(t,u),i=V(u,e,t,s),M=H(n,i),_=E(r,M);
+  const r=parseFloat(n.weight)||0,e=n.monthly_target||{},u=n.monthly_data||{},s=A(n.polarity),c=F(t,e),a=(d(t)?S(t,u,e):c),o=w(t,u),i=V(u,e,t,s),M=H(n,i,t),_=E(r,M);
   return{targetNum:a,actualNum:o,pencapaian:i,indeks:M,hasil:_,targetAnnual:c};
 }
 function q(n,t={},r){
   const e=t.monthly_data??n.monthly_data??{},u=t.monthly_target??n.monthly_target??{},s=r(t.unit??n.unit),c=w(s,e),a=F(s,u);
   return{...n,...t,monthly_data:e,monthly_target:u,actual:c,...(N(u).length>0?{target:a}:{})};
 }
-export{f as M,F as a,W as b,R as c,q as d,w as e,U as g,K as h,P as i};
+export{f as M,F as a,W as b,R as c,q as d,w as e,U as g,K as h,P as i,Y as y,kbScale as s};
