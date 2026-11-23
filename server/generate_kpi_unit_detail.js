@@ -85,7 +85,7 @@ const unitsData = [
   // 4. UKK COMERCIAL BUSINESS CENTER
   // ---------------------------------------------------------
   {
-    units: ['UKK Comercial Business Center'],
+    units: ['UKK Commercial Business Center'],
     kpis: [
       { p: 'financial', o: 'F2. Mengoptimalkan Pertumbuhan Pendapatan', k: 'F2.1. Pencapaian Target Pendapatan Bunga Kredit Komersial', w: 10, u: 'Rp', t: '100%' },
       { p: 'financial', o: 'F2. Mengoptimalkan Pertumbuhan Pendapatan', k: 'F2.2. Pencapaian Target Fee Based Income (Trade Finance, dll)', w: 10, u: 'Rp', t: '100%' },

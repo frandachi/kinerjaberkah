@@ -2,7 +2,12 @@ const crypto = require('crypto');
 
 const CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const TTL_MS = 5 * 60 * 1000;
-const store = new Map();
+// Stateless signed captcha: aman multi-worker Passenger, tanpa file/store bersama.
+const usedIds = new Map(); // anti-replay lokal (best-effort)
+
+function secret() {
+  return process.env.JWT_SECRET || process.env.CAPTCHA_SECRET || 'kb-captcha-fallback';
+}
 
 function hashAnswer(value) {
   return crypto.createHash('sha256').update(String(value).trim().toUpperCase()).digest('hex');
@@ -54,21 +59,27 @@ function svgCaptcha(text) {
   </svg>`;
 }
 
-function pruneExpired() {
+function sign(payloadB64) {
+  return crypto.createHmac('sha256', secret()).update(payloadB64).digest('base64url');
+}
+
+function pruneUsed() {
   const now = Date.now();
-  for (const [id, row] of store.entries()) {
-    if (row.expiresAt <= now) store.delete(id);
+  for (const [id, exp] of usedIds.entries()) {
+    if (exp <= now) usedIds.delete(id);
   }
 }
 
 function createCaptcha() {
-  pruneExpired();
-  const id = crypto.randomBytes(16).toString('hex');
+  pruneUsed();
   const text = generateText(5);
-  store.set(id, {
-    hash: hashAnswer(text),
-    expiresAt: Date.now() + TTL_MS,
-  });
+  const payload = {
+    h: hashAnswer(text),
+    e: Date.now() + TTL_MS,
+    n: crypto.randomBytes(8).toString('hex'),
+  };
+  const payloadB64 = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  const id = `${payloadB64}.${sign(payloadB64)}`;
   const svg = svgCaptcha(text);
   return {
     id,
@@ -77,13 +88,22 @@ function createCaptcha() {
 }
 
 function consumeCaptcha(id, answer) {
-  pruneExpired();
-  const row = store.get(id);
-  if (!row) return false;
-  store.delete(id);
-  if (row.expiresAt <= Date.now()) return false;
+  pruneUsed();
+  if (!id || typeof id !== 'string' || !id.includes('.')) return false;
+  if (usedIds.has(id)) return false;
+  const [payloadB64, sig] = id.split('.');
+  if (!payloadB64 || !sig || sign(payloadB64) !== sig) return false;
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
+  } catch {
+    return false;
+  }
+  if (!payload || !payload.h || !payload.e || payload.e <= Date.now()) return false;
   if (!answer || String(answer).trim().length < 4) return false;
-  return row.hash === hashAnswer(answer);
+  const ok = payload.h === hashAnswer(answer);
+  if (ok) usedIds.set(id, payload.e);
+  return ok;
 }
 
 module.exports = { createCaptcha, consumeCaptcha };

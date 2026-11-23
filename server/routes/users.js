@@ -34,13 +34,25 @@ router.get('/', authenticateToken, authorizeRole('superadmin', 'admin'), async (
       queryParams.push(unit_name);
     }
 
+    if (req.query.role) {
+      whereClauses.push('role = ?');
+      queryParams.push(String(req.query.role));
+    }
+
+    const statusFilter = String(req.query.status || '').trim().toLowerCase();
+    if (statusFilter === 'nonaktif') {
+      whereClauses.push("LOWER(COALESCE(status,'aktif')) = 'nonaktif'");
+    } else if (statusFilter === 'aktif') {
+      whereClauses.push("LOWER(COALESCE(status,'aktif')) <> 'nonaktif'");
+    }
+
     const whereStr = whereClauses.length ? ` WHERE ${whereClauses.join(' AND ')}` : '';
 
     const [countResult] = await db.query(`SELECT COUNT(*) as total FROM users${whereStr}`, queryParams);
     const total = countResult[0]?.total ?? 0;
 
     const [users] = await db.query(
-      `SELECT id, username, name, role, jabatan, unit_name, npp, supervisi_approval, created_at, last_login FROM users${whereStr} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      `SELECT id, username, name, role, jabatan, unit_name, npp, supervisi_approval, created_at, last_login, COALESCE(status,'aktif') AS status, (locked_until IS NOT NULL AND locked_until > NOW()) AS locked FROM users${whereStr} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
       [...queryParams, limitNum, offset]
     );
 
@@ -72,20 +84,26 @@ router.get('/stats', authenticateToken, authorizeRole('superadmin', 'admin'), as
     const [[locked]] = await db.query(`
       SELECT COUNT(*) AS c FROM users
       WHERE locked_until IS NOT NULL AND locked_until > NOW()
+        AND LOWER(COALESCE(status,'aktif')) <> 'nonaktif'
+    `).catch(() => [[{ c: 0 }]]);
+    const [[inactive]] = await db.query(`
+      SELECT COUNT(*) AS c FROM users
+      WHERE LOWER(COALESCE(status,'aktif')) = 'nonaktif'
     `).catch(() => [[{ c: 0 }]]);
 
     const totalUsers = u?.c || 0;
     const totalPegawai = p?.c || 0;
     const missingUsers = missing?.c || 0;
     const lockedCount = locked?.c || 0;
+    const inactiveCount = inactive?.c || 0;
 
     res.json({
       totalUsers,
       totalPegawai,
       missingUsers,
       locked: lockedCount,
-      nonaktif: 0,
-      aktif: Math.max(0, totalUsers - lockedCount),
+      nonaktif: inactiveCount,
+      aktif: Math.max(0, totalUsers - lockedCount - inactiveCount),
       synced: missingUsers === 0 && totalUsers >= totalPegawai,
     });
   } catch (error) {
@@ -98,6 +116,92 @@ router.get('/stats', authenticateToken, authorizeRole('superadmin', 'admin'), as
  * Buat akun user untuk setiap pegawai yang belum punya user.
  * Username/password default = NPP (atau id pegawai jika NPP kosong).
  */
+router.get('/role-status', authenticateToken, authorizeRole('superadmin', 'admin'), async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT role,
+        SUM(LOWER(COALESCE(status,'aktif')) = 'nonaktif') AS nonaktif,
+        SUM(LOWER(COALESCE(status,'aktif')) <> 'nonaktif') AS aktif,
+        COUNT(*) AS total
+      FROM users
+      GROUP BY role
+      ORDER BY role
+    `);
+    res.json({ roles: rows });
+  } catch (error) {
+    console.error('Role status error:', error.message);
+    res.status(500).json({ message: 'Gagal memuat status role' });
+  }
+});
+
+router.post(
+  '/role-status',
+  authenticateToken,
+  authorizeRole('superadmin', 'admin'),
+  auditMiddleware('SET_ROLE_STATUS'),
+  async (req, res) => {
+    try {
+      const role = String(req.body.role || '').trim();
+      const status = String(req.body.status || '').trim().toLowerCase();
+      if (!role || !['aktif', 'nonaktif'].includes(status)) {
+        return res.status(400).json({ message: 'Role dan status (aktif/nonaktif) wajib diisi' });
+      }
+      if (role === 'superadmin') {
+        return res.status(400).json({ message: 'Role superadmin tidak dapat dinonaktifkan' });
+      }
+      if (status === 'nonaktif' && String(req.user.role || '') === role) {
+        return res.status(400).json({ message: 'Tidak dapat menonaktifkan role yang sedang Anda pakai' });
+      }
+      const [result] = await db.query('UPDATE users SET status = ? WHERE role = ?', [status, role]);
+      res.json({
+        success: true,
+        role,
+        status,
+        updated: result.affectedRows || 0,
+        message: status === 'nonaktif'
+          ? `Semua akun role ${role} dinonaktifkan`
+          : `Semua akun role ${role} diaktifkan`,
+      });
+    } catch (error) {
+      console.error('Set role status error:', error.message);
+      res.status(500).json({ message: 'Gagal mengubah status role' });
+    }
+  }
+);
+
+router.post(
+  '/:id/status',
+  authenticateToken,
+  authorizeRole('superadmin', 'admin'),
+  auditMiddleware('SET_USER_STATUS'),
+  async (req, res) => {
+    try {
+      const status = String(req.body.status || '').trim().toLowerCase();
+      if (!['aktif', 'nonaktif'].includes(status)) {
+        return res.status(400).json({ message: 'Status wajib aktif atau nonaktif' });
+      }
+      const [rows] = await db.query('SELECT id, role FROM users WHERE id = ?', [req.params.id]);
+      if (!rows.length) return res.status(404).json({ message: 'User tidak ditemukan' });
+      if (rows[0].role === 'superadmin') {
+        return res.status(400).json({ message: 'Akun superadmin tidak dapat dinonaktifkan' });
+      }
+      if (status === 'nonaktif' && String(req.user.id) === String(req.params.id)) {
+        return res.status(400).json({ message: 'Tidak dapat menonaktifkan akun yang sedang dipakai' });
+      }
+      await db.query('UPDATE users SET status = ? WHERE id = ?', [status, req.params.id]);
+      res.json({
+        success: true,
+        id: req.params.id,
+        status,
+        message: status === 'aktif' ? 'Akun diaktifkan' : 'Akun dinonaktifkan',
+      });
+    } catch (error) {
+      console.error('Set user status error:', error.message);
+      res.status(500).json({ message: 'Gagal mengubah status akun' });
+    }
+  }
+);
+
 router.post(
   '/sync-from-pegawai',
   authenticateToken,

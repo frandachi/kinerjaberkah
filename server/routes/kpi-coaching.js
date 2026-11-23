@@ -10,7 +10,9 @@ const unitInduk = require('../lib/unit-induk.json');
 const router = express.Router();
 const THRESHOLD = 100;
 const EVIDENCE_MAX_BYTES = 2.5 * 1024 * 1024;
-const EVIDENCE_DIR = path.join(__dirname, '..', 'uploads', 'kpi-coaching');
+// Di luar public_html agar tidak bisa diunduh/dieksekusi Apache (anti PHP webshell).
+const EVIDENCE_DIR = process.env.KPI_COACHING_EVIDENCE_DIR
+  || path.join(process.env.HOME || '/home/pasiongo', 'kb-private', 'uploads', 'kpi-coaching');
 const ALLOWED_MIME = new Set([
   'application/pdf',
   'image/png',
@@ -20,8 +22,11 @@ const ALLOWED_MIME = new Set([
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/octet-stream',
 ]);
+const ALLOWED_EXT = new Set([
+  '.pdf', '.png', '.jpg', '.jpeg', '.webp', '.doc', '.docx', '.xls', '.xlsx',
+]);
+const BLOCKED_EXT = /\.(php\d*|phtml|phar|cgi|pl|py|jsp|asp|aspx|shtml|htaccess)$/i;
 
 let commentsTableReady = false;
 
@@ -283,12 +288,20 @@ function decodeEvidence(evidence) {
   if (buf.length > EVIDENCE_MAX_BYTES) {
     throw Object.assign(new Error('Ukuran bukti maksimal 2.5MB'), { status: 400 });
   }
-  const mimeType = String(evidence.mimeType || 'application/octet-stream').toLowerCase();
+  const mimeType = String(evidence.mimeType || '').toLowerCase();
   if (!ALLOWED_MIME.has(mimeType)) {
     throw Object.assign(new Error('Tipe file bukti tidak diizinkan'), { status: 400 });
   }
   const originalName = path.basename(String(evidence.originalName || 'bukti')).replace(/[^\w.\- ()]+/g, '_').slice(0, 120);
-  const ext = path.extname(originalName).slice(0, 10);
+  if (BLOCKED_EXT.test(originalName)) {
+    throw Object.assign(new Error('Ekstensi file bukti tidak diizinkan'), { status: 400 });
+  }
+  let ext = path.extname(originalName).toLowerCase().slice(0, 10);
+  if (ext === '.jpeg') ext = '.jpg';
+  if (!ALLOWED_EXT.has(ext)) {
+    throw Object.assign(new Error('Ekstensi file bukti tidak diizinkan'), { status: 400 });
+  }
+  // Nama simpan dikontrol server (bukan ekstensi mentah user) agar tidak jadi webshell.
   const stored = `${Date.now()}_${crypto.randomBytes(6).toString('hex')}${ext}`;
   return { buf, stored, originalName };
 }

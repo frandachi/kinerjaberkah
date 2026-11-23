@@ -125,7 +125,11 @@ function mergeMonthlyTarget(existingKpi, incomingMonthlyTarget, mutationAllowedM
   const out = { ...existing };
   for (const [month, value] of Object.entries(incoming)) {
     if (locked.has(month)) continue;
-    out[month] = value;
+    if (value === '' || value === null || value === undefined) {
+      delete out[month];
+    } else {
+      out[month] = value;
+    }
   }
   return out;
 }

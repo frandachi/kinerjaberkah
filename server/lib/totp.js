@@ -98,6 +98,12 @@ function sanitizeUser(user) {
   delete copy.locked_until;
   delete copy.totp_secret;
   copy.totp_enabled = isTotpEnabled(user);
+  try {
+    const { attachUnitScope } = require('./unitScope');
+    attachUnitScope(copy);
+  } catch (_) {
+    /* unit scope optional */
+  }
   return copy;
 }
 

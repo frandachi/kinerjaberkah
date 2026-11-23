@@ -11,7 +11,33 @@ const { normalizeNameKey, stripNameSymbols, normalizePerspectiveKey } = require(
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
 const UNIT_CODES = ['percentage', 'currency', 'score', 'number'];
 const PERSPECTIVES = ['financial', 'customer', 'internal_process', 'learning_growth'];
-const POLARITIES = ['maximize', 'minimize', 'faster', 'range'];
+const POLARITIES = [
+  'maximize', 'minimize', 'faster', 'range', 'stabilize',
+  'maximize_a', 'maximize_b', 'maximize_c',
+  'minimize_a', 'minimize_b', 'minimize_c',
+];
+
+/** Terima label Excel ("Maximize A") maupun kode DB (maximize_a). */
+function normalizePolarityCode(raw) {
+  const p = String(raw == null ? '' : raw)
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ');
+  if (!p) return null;
+  if (/minimi[sz]e\s*c|stabilize|stabilisasi|stabil/.test(p)) return 'minimize_c';
+  if (/minimi[sz]e\s*b/.test(p)) return 'minimize_b';
+  if (/minimi[sz]e\s*a/.test(p) || /^minimi[sz]e$/.test(p)) return 'minimize_a';
+  if (/minimi[sz]e/.test(p)) return 'minimize_a';
+  if (/faster|waktu/.test(p)) return 'faster';
+  if (/range|rentang/.test(p)) return 'range';
+  if (/maximi[sz]e\s*c/.test(p)) return 'maximize_c';
+  if (/maximi[sz]e\s*b/.test(p)) return 'maximize_b';
+  if (/maximi[sz]e\s*a/.test(p)) return 'maximize_a';
+  if (/^maximi[sz]e$/.test(p)) return 'maximize';
+  const compact = p.replace(/\s+/g, '_');
+  return POLARITIES.includes(compact) ? compact : null;
+}
 
 function normSpace(v) {
   return String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
@@ -183,8 +209,12 @@ function sanitizeKpi(raw, idx, maxMonthIdx = 11) {
   if (!name) return null;
   const unit = UNIT_CODES.includes(raw.unit) ? raw.unit : 'percentage';
   const perspective = PERSPECTIVES.includes(raw.perspective) ? raw.perspective : 'financial';
-  const polarity = POLARITIES.includes(raw.polarity) ? raw.polarity : 'maximize';
-  const weight = Math.max(0, Math.min(999.99, toNumberOrNull(raw.weight) || 0));
+  const polarity = normalizePolarityCode(raw.polarity) || 'maximize_a';
+  // Excel sering menyimpan 15% sebagai 0.15 (format Persen). Skala sistem = 0–100.
+  // Ambang < 1 agar bobot 1% (nilai 1) tidak dikali jadi 100.
+  let weight = toNumberOrNull(raw.weight) || 0;
+  if (weight > 0 && weight < 1) weight *= 100;
+  weight = Math.max(0, Math.min(999.99, weight));
   const monthly_data = cleanMonthly(raw.monthly_data);
   const futureDropped = MONTHS.slice(maxMonthIdx + 1).filter((m) => monthly_data[m] !== undefined);
   futureDropped.forEach((m) => delete monthly_data[m]);
@@ -283,7 +313,7 @@ function createMasterResolver(masterRows, takenCodes = []) {
       name: stripNameSymbols(row.name),
       perspective: normalizePerspectiveKey(row.perspective),
       unit: UNIT_CODES.includes(row.unit) ? row.unit : null,
-      polarity: POLARITIES.includes(row.polarity) ? row.polarity : null,
+      polarity: normalizePolarityCode(row.polarity),
       isNew: false,
     };
     used.add(row.code);
@@ -331,6 +361,8 @@ function createMasterResolver(masterRows, takenCodes = []) {
 
 module.exports = {
   MONTHS,
+  POLARITIES,
+  normalizePolarityCode,
   normSpace,
   normalizeName,
   normalizeJabatan,

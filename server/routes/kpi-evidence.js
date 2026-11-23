@@ -10,7 +10,9 @@ const { auditMiddleware } = require('../middleware/audit');
 const router = express.Router();
 
 const EVIDENCE_MAX_BYTES = 1 * 1024 * 1024;
-const EVIDENCE_DIR = path.join(__dirname, '..', 'uploads', 'kpi-evidence');
+// Di luar public_html agar tidak bisa diunduh/dieksekusi Apache (anti PHP webshell).
+const EVIDENCE_DIR = process.env.KPI_EVIDENCE_DIR
+  || path.join(process.env.HOME || '/home/pasiongo', 'kb-private', 'uploads', 'kpi-evidence');
 const ALLOWED_MIME = new Set([
   'application/pdf',
 ]);

@@ -3,6 +3,35 @@ const crypto = require('crypto');
 const db = require('../db');
 const authenticateToken = require('../middleware/auth');
 const authorizeRole = require('../middleware/authorize');
+const requirePermission = require('../middleware/requirePermission');
+const requireAnyPermission = requirePermission.requireAnyPermission;
+const {
+  resolveUnitScope,
+  unitInScope,
+  sqlInPlaceholders,
+} = require('../lib/unitScope');
+
+/** Data Pegawai: admin hanya unit sendiri (tanpa anak unit), plus variasi ejaan. */
+async function resolvePegawaiUnitScope(db, user) {
+  const scope = await resolveUnitScope(db, user);
+  if (scope.unrestricted) return scope;
+  let self = String(user.unit_name || '').trim();
+  try {
+    const [rows] = await db.query('SELECT unit_name FROM users WHERE id = ? LIMIT 1', [user.id]);
+    self = String((rows[0] && rows[0].unit_name) || self || '').trim();
+  } catch { /* ignore */ }
+  if (!self) return { unrestricted: false, units: [] };
+  try {
+    const { variantNames, canonicalKey } = require('../lib/unitScope');
+    const selfCanon = canonicalKey(self);
+    // Ambil hanya variasi ejaan unit sendiri dari hasil resolveUnitScope (yang sudah expand DB)
+    const units = (scope.units || []).filter((u) => canonicalKey(u) === selfCanon);
+    const base = variantNames(self);
+    return { unrestricted: false, units: [...new Set([...(units.length ? units : base), ...base])] };
+  } catch {
+    return { unrestricted: false, units: [self] };
+  }
+}
 
 const router = express.Router();
 
@@ -69,6 +98,28 @@ router.get('/', authenticateToken, async (req, res) => {
       } else {
         return res.json(isPaginated ? { data: [], total: 0, page: 1, limit: 100, totalPages: 1 } : []);
       }
+    } else {
+      // admin (bukan superadmin): hanya unit kerja sendiri
+      const scope = await resolvePegawaiUnitScope(db, req.user);
+      if (!scope.unrestricted) {
+        const units = scope.units || [];
+        if (!units.length) {
+          return res.json(isPaginated ? { data: [], total: 0, page: 1, limit: 100, totalPages: 1 } : []);
+        }
+        if (unit_name && unit_name !== 'all') {
+          if (!unitInScope(unit_name, units)) {
+            return res.json(isPaginated ? { data: [], total: 0, page: 1, limit: 100, totalPages: 1 } : []);
+          }
+          whereParts.push('unit_name = ?');
+          queryParams.push(unit_name);
+        } else {
+          whereParts.push(`unit_name IN (${sqlInPlaceholders(units.length)})`);
+          queryParams.push(...units);
+        }
+      } else if (unit_name && unit_name !== 'all') {
+        whereParts.push('unit_name = ?');
+        queryParams.push(unit_name);
+      }
     }
 
     if (search) {
@@ -77,7 +128,7 @@ router.get('/', authenticateToken, async (req, res) => {
       queryParams.push(searchParam, searchParam, searchParam, searchParam);
     }
 
-    if (unit_name && unit_name !== 'all') {
+    if (req.user.role === 'user' && unit_name && unit_name !== 'all') {
       whereParts.push('unit_name = ?');
       queryParams.push(unit_name);
     }
@@ -139,11 +190,18 @@ router.get('/', authenticateToken, async (req, res) => {
 
 router.get('/meta/jabatan', authenticateToken, authorizeRole('admin', 'superadmin'), async (req, res) => {
   try {
-    const [rows] = await db.query(
-      `SELECT DISTINCT jabatan FROM pegawai
-       WHERE jabatan IS NOT NULL AND jabatan != '' AND jabatan != '-'
-       ORDER BY jabatan`
-    );
+    const scope = await resolvePegawaiUnitScope(db, req.user);
+    let sql = `SELECT DISTINCT jabatan FROM pegawai
+       WHERE jabatan IS NOT NULL AND jabatan != '' AND jabatan != '-'`;
+    const params = [];
+    if (!scope.unrestricted) {
+      const units = scope.units || [];
+      if (!units.length) return res.json([]);
+      sql += ` AND unit_name IN (${sqlInPlaceholders(units.length)})`;
+      params.push(...units);
+    }
+    sql += ' ORDER BY jabatan';
+    const [rows] = await db.query(sql, params);
     res.json(rows.map((r) => r.jabatan));
   } catch (error) {
     console.error('Get pegawai jabatan list error:', error.message);
@@ -155,29 +213,45 @@ router.get('/meta/jabatan', authenticateToken, authorizeRole('admin', 'superadmi
 router.get('/stats', authenticateToken, authorizeRole('admin', 'superadmin'), async (req, res) => {
   try {
     await ensurePegawaiSchema();
-    const [[totalRow]] = await db.query('SELECT COUNT(*) AS c FROM pegawai');
+    const scope = await resolvePegawaiUnitScope(db, req.user);
+    let scopeSql = '';
+    const scopeParams = [];
+    if (!scope.unrestricted) {
+      const units = scope.units || [];
+      if (!units.length) {
+        return res.json({ total: 0, aktif: 0, nonaktif: 0, pensiun: 0, withUser: 0, byUnit: [] });
+      }
+      scopeSql = ` WHERE unit_name IN (${sqlInPlaceholders(units.length)})`;
+      scopeParams.push(...units);
+    }
+
+    const [[totalRow]] = await db.query(`SELECT COUNT(*) AS c FROM pegawai${scopeSql}`, scopeParams);
     const [[aktifRow]] = await db.query(
-      "SELECT COUNT(*) AS c FROM pegawai WHERE COALESCE(status, 'aktif') = 'aktif'"
+      `SELECT COUNT(*) AS c FROM pegawai${scopeSql ? `${scopeSql} AND` : ' WHERE'} COALESCE(status, 'aktif') = 'aktif'`,
+      scopeParams
     );
     const [[nonaktifRow]] = await db.query(
-      "SELECT COUNT(*) AS c FROM pegawai WHERE status = 'non_aktif'"
+      `SELECT COUNT(*) AS c FROM pegawai${scopeSql ? `${scopeSql} AND` : ' WHERE'} status = 'non_aktif'`,
+      scopeParams
     );
     const [[pensiunRow]] = await db.query(
-      "SELECT COUNT(*) AS c FROM pegawai WHERE status IN ('pensiun', 'keluar')"
+      `SELECT COUNT(*) AS c FROM pegawai${scopeSql ? `${scopeSql} AND` : ' WHERE'} status IN ('pensiun', 'keluar')`,
+      scopeParams
     );
-    const [[withUser]] = await db.query(`
-      SELECT COUNT(*) AS c
-      FROM pegawai p
-      INNER JOIN users u ON u.pegawai_id = p.id
-    `);
-    const [byUnit] = await db.query(`
-      SELECT unit_name AS name, COUNT(*) AS value
-      FROM pegawai
-      WHERE unit_name IS NOT NULL AND TRIM(unit_name) <> ''
-      GROUP BY unit_name
-      ORDER BY value DESC
-      LIMIT 12
-    `);
+    const withUserSql = scope.unrestricted
+      ? `SELECT COUNT(*) AS c FROM pegawai p INNER JOIN users u ON u.pegawai_id = p.id`
+      : `SELECT COUNT(*) AS c FROM pegawai p INNER JOIN users u ON u.pegawai_id = p.id
+         WHERE p.unit_name IN (${sqlInPlaceholders(scopeParams.length)})`;
+    const [[withUser]] = await db.query(withUserSql, scopeParams);
+    const [byUnit] = await db.query(
+      `SELECT unit_name AS name, COUNT(*) AS value
+       FROM pegawai
+       ${scopeSql ? scopeSql + ' AND' : ' WHERE'} unit_name IS NOT NULL AND TRIM(unit_name) <> ''
+       GROUP BY unit_name
+       ORDER BY value DESC
+       LIMIT 12`,
+      scopeParams
+    );
 
     res.json({
       total: totalRow?.c || 0,
@@ -193,7 +267,7 @@ router.get('/stats', authenticateToken, authorizeRole('admin', 'superadmin'), as
   }
 });
 
-router.put('/:id', authenticateToken, authorizeRole('admin', 'superadmin'), async (req, res) => {
+router.put('/:id', authenticateToken, authorizeRole('admin', 'superadmin'), requirePermission('Data Pegawai', 'edit'), async (req, res) => {
   try {
     await ensurePegawaiSchema();
     const { id } = req.params;
@@ -201,9 +275,19 @@ router.put('/:id', authenticateToken, authorizeRole('admin', 'superadmin'), asyn
     const { name, npp, jabatan, unit_name, status } = req.body;
     const statusVal = normalizePegawaiStatus(status);
 
-    const [existing] = await db.query('SELECT id, npp FROM pegawai WHERE id = ?', [id]);
+    const [existing] = await db.query('SELECT id, npp, unit_name FROM pegawai WHERE id = ?', [id]);
     if (existing.length === 0) {
       return res.status(404).json({ message: 'Pegawai tidak ditemukan' });
+    }
+
+    if (!isSuperadmin) {
+      const scope = await resolvePegawaiUnitScope(db, req.user);
+      if (!scope.unrestricted && !unitInScope(existing[0].unit_name, scope.units || [])) {
+        return res.status(403).json({ message: 'Pegawai di luar unit kerja Anda.' });
+      }
+      if (unit_name && !unitInScope(unit_name, scope.units || [req.user.unit_name])) {
+        return res.status(403).json({ message: 'Tidak dapat memindahkan pegawai ke unit di luar scope Anda.' });
+      }
     }
 
     if (isSuperadmin) {
@@ -252,7 +336,7 @@ router.put('/:id', authenticateToken, authorizeRole('admin', 'superadmin'), asyn
   }
 });
 
-router.post('/', authenticateToken, authorizeRole('superadmin'), async (req, res) => {
+router.post('/', authenticateToken, authorizeRole('superadmin'), requirePermission('Data Pegawai', 'add'), async (req, res) => {
   try {
     await ensurePegawaiSchema();
     const { name, npp, jabatan, unit_name, status } = req.body;
@@ -281,7 +365,7 @@ router.post('/', authenticateToken, authorizeRole('superadmin'), async (req, res
   }
 });
 
-router.delete('/:id', authenticateToken, authorizeRole('superadmin'), async (req, res) => {
+router.delete('/:id', authenticateToken, authorizeRole('superadmin'), requirePermission('Data Pegawai', 'delete'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -313,7 +397,7 @@ router.delete('/:id', authenticateToken, authorizeRole('superadmin'), async (req
   }
 });
 
-router.post('/sync-hris', authenticateToken, authorizeRole('admin', 'superadmin'), async (req, res) => {
+router.post('/sync-hris', authenticateToken, authorizeRole('admin', 'superadmin'), requireAnyPermission('Data Pegawai', ['add', 'edit', 'export']), async (req, res) => {
   try {
     const { inqMasterPegawaiByKondisi } = require('../lib/hris-gateway');
     const { syncPegawaiList } = require('../lib/hris-upsert');

@@ -9,7 +9,7 @@ const pool = mysql.createPool({
   database: process.env.DB_NAME || 'kpi_corporate',
 });
 
-const SEMUA_DIVISI = 'Departemen Hukum, Departemen Marketing Communication, Departemen Perlindungan Konsumen, Divisi Audit Internal, Divisi Corporate Secretary, Divisi Credit Risk, Divisi Digital Banking, Divisi Funding & Wealth Management, Divisi Human Capital, Divisi Keuangan, Divisi Kepatuhan, Divisi Kredit Konsumer, Divisi Manajemen Risiko, Divisi Operasional, Divisi Penyelamatan Kredit, Divisi Perencanaan Strategis, Divisi SME & Commercial, Divisi Teknologi Informasi, Divisi Treasury, Divisi Umum, UKK Comercial Business Center, UKK Internal Control over Financial Report, Unit Anti Fraud, Unit Audit Internal Syariah, Unit Keamanan dan Ketahan Siber, Unit Kepatuhan Syariah, Unit Manajemen Risiko Syariah, Unit Pengendalian Gratifikasi, Unit Usaha Syariah';
+const SEMUA_DIVISI = 'Departemen Hukum, Departemen Marketing Communication, Departemen Perlindungan Konsumen, Divisi Audit Internal, Divisi Corporate Secretary, Divisi Credit Risk, Divisi Digital Banking, Divisi Funding & Wealth Management, Divisi Human Capital, Divisi Keuangan, Divisi Kepatuhan, Divisi Kredit Konsumer, Divisi Manajemen Risiko, Divisi Operasional, Divisi Penyelamatan Kredit, Divisi Perencanaan Strategis, Divisi SME & Commercial, Divisi Teknologi Informasi, Divisi Treasury, Divisi Umum, UKK Commercial Business Center, UKK Internal Control over Financial Report, Unit Anti Fraud, Unit Audit Internal Syariah, Unit Keamanan dan Ketahan Siber, Unit Kepatuhan Syariah, Unit Manajemen Risiko Syariah, Unit Pengendalian Gratifikasi, Unit Usaha Syariah';
 
 const data = [
   // FINANCIAL

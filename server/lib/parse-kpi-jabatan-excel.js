@@ -70,19 +70,29 @@ function isHeaderLikeJabatan(jabatan) {
   return !j || j === 'jabatan' || j.includes('indikator') || j.includes('key performance');
 }
 
-function parseNumericValue(raw, unit) {
+function isNplGrossName(name) {
+  return /\bnpl\b/i.test(String(name || '')) && /gross/i.test(String(name || ''));
+}
+
+function parseNumericValue(raw, unit, kpiName = '') {
   if (raw === null || raw === undefined || raw === '') return null;
-  if (typeof raw === 'number') {
-    if (unit === 'percentage' && Math.abs(raw) <= 1.5) return Math.round(raw * 10000) / 100;
-    return raw;
-  }
+  const scalePct = (num) => {
+    if (unit !== 'percentage') return num;
+    // NPL Gross: 0.37 = 0.37% (jangan ×100 → 37)
+    if (isNplGrossName(kpiName)) {
+      if (Math.abs(num) > 0 && Math.abs(num) <= 0.05) return Math.round(num * 10000) / 100;
+      return num;
+    }
+    if (Math.abs(num) <= 1.5) return Math.round(num * 10000) / 100;
+    return num;
+  };
+  if (typeof raw === 'number') return scalePct(raw);
   const text = String(raw).trim();
   const match = text.match(/-?\d+(?:[.,]\d+)?/);
   if (!match) return null;
   const num = parseFloat(match[0].replace(',', '.'));
   if (Number.isNaN(num)) return null;
-  if (unit === 'percentage' && Math.abs(num) <= 1.5) return Math.round(num * 10000) / 100;
-  return num;
+  return scalePct(num);
 }
 
 function cleanName(name) {
@@ -127,15 +137,15 @@ function parseKpiJabatanExcel(filePath) {
 
     const unit = normalizeUnit(row[unitIdx]);
     const weight = Number(row[weightIdx]) || 0;
-    const annualTarget = parseNumericValue(row[targetIdx], unit);
+    const annualTarget = parseNumericValue(row[targetIdx], unit, name);
 
     const monthly_data = {};
     const monthly_target = {};
 
     MONTHS.forEach((month, mi) => {
       const base = monthStartIdx + mi * 3;
-      const real = parseNumericValue(row[base], unit);
-      const tgt = parseNumericValue(row[base + 1], unit);
+      const real = parseNumericValue(row[base], unit, name);
+      const tgt = parseNumericValue(row[base + 1], unit, name);
       if (real !== null) monthly_data[month] = real;
       if (tgt !== null) monthly_target[month] = tgt;
     });

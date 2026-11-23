@@ -1,0 +1,105 @@
+no,kode,excelName,appName,excel,app,delta,abs_delta,kategori_selisih,kpiCount,weight,kategoriExcel
+76,276,KCP Gido,Cabang Pembantu Gido,2.38,2.02,0.36,0.36,selisih_besar,13,100,Cukup Baik
+100,315,KCP Diski,Cabang Pembantu Diski,2.28,1.95,0.33,0.33,selisih_besar,13,100,Cukup Baik
+87,288,KCP Alasa (10 Agustus 2026),Cabang Pembantu Alasa,2.06,1.75,0.31,0.31,selisih_besar,13,100,Cukup Baik
+75,274,KCP Pulau Tello,Cabang Pembantu Pulau Tello,2.55,2.25,0.3,0.3,selisih_besar,13,100,Baik
+41,218,KCP Sigambal,Cabang Pembantu Sigambal,2.29,2.01,0.28,0.28,selisih_besar,13,100,Cukup Baik
+50,229,KCP Sinaksak,Cabang Pembantu Sinaksak,2.19,1.92,0.27,0.27,selisih_besar,13,100,Cukup Baik
+86,287,KCP Kualuh Leidong (25 Mei 2026),Cabang Pembantu Kualuh Leidong,2.06,1.8,0.26,0.26,selisih_besar,13,100,Cukup Baik
+88,292,KCP Barus,Cabang Pembantu Barus,2.34,2.08,0.26,0.26,selisih_besar,13,100,Cukup Baik
+29,144,KCP Kelambir Lima,Cabang Pembantu Kelambir Lima,2.25,2,0.25,0.25,selisih_besar,13,100,Cukup Baik
+85,286,KCP Sei Berombang (11 Februari 2026),Cabang Pembantu Sei Berombang,2.19,1.96,0.23,0.23,selisih_besar,13,100,Cukup Baik
+38,215,KCP Kampung Pajak,Cabang Pembantu Kampung Pajak,2.23,2.01,0.22,0.22,selisih_besar,13,100,Cukup Baik
+53,236,KCP Sadabuan,Cabang Pembantu Sadabuan,1.96,2.16,-0.2,0.2,selisih_besar,13,100,Cukup Baik
+102,317,KCP Pasar Tavip,Cabang Pembantu Pasar Tavip,2.26,2.07,0.19,0.19,selisih_besar,13,100,Cukup Baik
+66,259,KCP Saipar Dolok Hole (Nov 2025),Cabang Pembantu Saipar Dolok Hole,2.25,2.07,0.18,0.18,selisih_besar,13,100,Cukup Baik
+54,237,KCP Sangkumpal Bonang,Cabang Pembantu Sangkumpal Bonang,2.06,1.89,0.17,0.17,selisih_besar,15,107.5,Cukup Baik
+59,249,KCP Hutaraja Tinggi,Cabang Pembantu Hutaraja Tinggi,2.06,1.89,0.17,0.17,selisih_besar,13,100,Cukup Baik
+49,228,KCP Pasar Dwikora Parluasan,Cabang Pembantu Pasar Dwikora Parluasan,2.04,1.88,0.16,0.16,selisih_besar,13,100,Cukup Baik
+131,633,KCPS Kampung Pon,Cabang Pembantu Syariah Kampung Pon,2.25,2.4,-0.15,0.15,selisih_besar,11,90,Cukup Baik
+51,232,KCP Batang Toru,Cabang Pembantu Batang Toru,2.15,2.01,0.14,0.14,selisih_sedang,13,100,Cukup Baik
+74,273,KCP Lahomi,Cabang Pembantu Lahomi,2.77,2.63,0.14,0.14,selisih_sedang,13,100,Baik
+109,329,KCP Bahorok,Cabang Pembantu Bahorok,2.11,1.97,0.14,0.14,selisih_sedang,13,100,Cukup Baik
+126,618,KCPS Marelan Raya,Cabang Pembantu Syariah Marelan Raya,1.8,1.93,-0.13,0.13,selisih_sedang,11,90,Cukup Baik
+129,631,KCPS Lubuk Pakam,Cabang Pembantu Syariah Lubuk Pakam,2.09,2.22,-0.13,0.13,selisih_sedang,11,90,Cukup Baik
+123,615,KCPS Binjai,Cabang Pembantu Syariah Binjai,2.07,2.19,-0.12,0.12,selisih_sedang,11,90,Cukup Baik
+46,225,KCP Sudirman Raya,Cabang Pembantu Sudirman Raya,2.15,2.04,0.11,0.11,selisih_sedang,13,100,Cukup Baik
+69,265,KCP Air Joman,Cabang Pembantu Air Joman,2.13,2.24,-0.11,0.11,selisih_sedang,13,100,Cukup Baik
+83,284,KCP Pasar Sidikalang,Cabang Pembantu Pasar Sidikalang,2.14,2.03,0.11,0.11,selisih_sedang,13,100,Cukup Baik
+97,312,KCP Pangkalan Brandan,Cabang Pembantu Pangkalan Brandan,2.12,2.01,0.11,0.11,selisih_sedang,15,107.5,Cukup Baik
+125,617,KCPS HM Yamin,Cabang Pembantu Syariah HM Yamin,1.92,2.03,-0.11,0.11,selisih_sedang,11,90,Cukup Baik
+73,272,KCP Lotu,Cabang Pembantu Lotu,2.4,2.3,0.1,0.1,selisih_sedang,13,100,Cukup Baik
+108,328,KCP Batang Serangan,Cabang Pembantu Batang Serangan,2.11,2.01,0.1,0.1,selisih_sedang,13,100,Cukup Baik
+117,346,KCP Sinunukan,Cabang Pembantu Sinunukan,1.99,1.89,0.1,0.1,selisih_sedang,13,100,Cukup Baik
+118,361,KCP Tigarunggu (04 Agt 2025),Cabang Pembantu Tigarunggu,2.32,2.22,0.1,0.1,selisih_sedang,13,100,Cukup Baik
+127,619,KCPS Hamparan Perak,Cabang Pembantu Syariah Hamparan Perak,1.96,2.06,-0.1,0.1,selisih_sedang,11,90,Cukup Baik
+135,662,KCPS Rantau Prapat,Cabang Pembantu Syariah Rantau Prapat,1.92,2.02,-0.1,0.1,selisih_sedang,11,90,Cukup Baik
+22,130,KCP Beringin,Cabang Pembantu Beringin,1.88,1.79,0.09,0.09,selisih_sedang,13,100,Cukup Baik
+57,245,KCP Laguboti,Cabang Pembantu Laguboti,2.3,2.21,0.09,0.09,selisih_sedang,13,100,Cukup Baik
+78,278,KCP Lolowau,Cabang Pembantu Lolowau,2.22,2.13,0.09,0.09,selisih_sedang,13,100,Cukup Baik
+93,303,KCP Dolok Masihul,Cabang Pembantu Dolok Masihul,2.37,2.28,0.09,0.09,selisih_sedang,13,100,Cukup Baik
+120,611,KCPS Multatuli,Cabang Pembantu Syariah Multatuli,2.09,2,0.09,0.09,selisih_sedang,11,90,Cukup Baik
+121,612,KCPS Karya,Cabang Pembantu Syariah Karya,1.76,1.85,-0.09,0.09,selisih_sedang,11,90,Cukup Baik
+47,226,KCP Serbelawan,Cabang Pembantu Serbelawan,2,1.92,0.08,0.08,selisih_sedang,13,100,Cukup Baik
+64,256,KCP Lau Baleng,Cabang Pembantu Lau Baleng,2.11,2.03,0.08,0.08,selisih_sedang,13,100,Cukup Baik
+103,318,KCP Pangkalan Susu,Cabang Pembantu Pangkalan Susu,2.19,2.11,0.08,0.08,selisih_sedang,13,100,Cukup Baik
+106,326,KCP Pangaribuan,Cabang Pembantu Pangaribuan,2.26,2.18,0.08,0.08,selisih_sedang,13,100,Cukup Baik
+122,613,KCPS HM Joni,Cabang Pembantu Syariah HM Joni,1.73,1.81,-0.08,0.08,selisih_sedang,11,90,Cukup Baik
+132,640,KCPS Stabat,Cabang Pembantu Syariah Stabat,2.3,2.38,-0.08,0.08,selisih_sedang,11,90,Cukup Baik
+35,201,KCP Sidamanik,Cabang Pembantu Sidamanik,2.33,2.26,0.07,0.07,selisih_sedang,13,100,Cukup Baik
+70,266,KCP Cokroaminoto,Cabang Pembantu Cokroaminoto,2.19,2.26,-0.07,0.07,selisih_sedang,13,100,Cukup Baik
+82,283,KCP Sumbul,Cabang Pembantu Sumbul,2.16,2.09,0.07,0.07,selisih_sedang,13,100,Cukup Baik
+130,632,KCPS Kisaran,Cabang Pembantu Syariah Kisaran,1.74,1.81,-0.07,0.07,selisih_sedang,11,90,Cukup Baik
+25,135,KCP Pasar Halat,Cabang Pembantu Pasar Halat,2.2,2.14,0.06,0.06,selisih_sedang,15,107.5,Cukup Baik
+40,217,KCP Langga Payung,Cabang Pembantu Langga Payung,2.3,2.24,0.06,0.06,selisih_sedang,15,107.5,Cukup Baik
+55,238,KCP Pijor Koling,Cabang Pembantu Pijor Koling,2.07,2.01,0.06,0.06,selisih_sedang,13,100,Cukup Baik
+62,253,KCP Merek,Cabang Pembantu Merek,2.16,2.1,0.06,0.06,selisih_sedang,13,100,Cukup Baik
+124,616,KCPS Kota Baru Marelan,Cabang Pembantu Syariah Kota Baru Marelan,1.9,1.96,-0.06,0.06,selisih_sedang,11,90,Cukup Baik
+133,641,KCPS Sp Kayu Besar,Cabang Pembantu Syariah Sp Kayu Besar,2.07,2.13,-0.06,0.06,selisih_sedang,12,95,Cukup Baik
+56,242,KCP Porsea,Cabang Pembantu Porsea,2.23,2.18,0.05,0.05,selisih_sedang,13,100,Cukup Baik
+65,257,KCP Sibolangit,Cabang Pembantu Sibolangit,2.58,2.53,0.05,0.05,selisih_sedang,13,100,Baik
+79,279,KCP Tanjung Medan,Cabang Pembantu Tanjung Medan,2.32,2.37,-0.05,0.05,selisih_sedang,13,100,Cukup Baik
+89,294,KCP Manduamas,Cabang Pembantu Manduamas,2.07,2.02,0.05,0.05,selisih_sedang,13,100,Cukup Baik
+115,344,KCP Pasar Panyabungan,Cabang Pembantu Pasar Panyabungan,2.13,2.08,0.05,0.05,selisih_sedang,12,90,Cukup Baik
+134,661,KCPS Perdagangan,Cabang Pembantu Syariah Perdagangan,1.83,1.88,-0.05,0.05,selisih_sedang,11,90,Cukup Baik
+27,142,KCP Simalingkar,Cabang Pembantu Simalingkar,2.16,2.12,0.04,0.04,selisih_kecil,13,100,Cukup Baik
+67,261,KCP Indrapura,Cabang Pembantu Indrapura,2.42,2.38,0.04,0.04,selisih_kecil,13,100,Cukup Baik
+77,277,KCP Lahewa,Cabang Pembantu Lahewa,2.32,2.28,0.04,0.04,selisih_kecil,13,100,Cukup Baik
+84,285,KCP Parongil (25 sep 2025),Cabang Pembantu Parongil,2.27,2.31,-0.04,0.04,selisih_kecil,13,100,Cukup Baik
+95,305,KCP Sipispis,Cabang Pembantu Sipispis,2.16,2.2,-0.04,0.04,selisih_kecil,13,100,Cukup Baik
+96,306,KCP Kebun Kopi,Cabang Pembantu Kebun Kopi,2.11,2.07,0.04,0.04,selisih_kecil,13,100,Cukup Baik
+98,313,KCP Tanjung Pura,Cabang Pembantu Tanjung Pura,2.03,1.99,0.04,0.04,selisih_kecil,15,107.5,Cukup Baik
+111,332,KCP Pulau Rakyat,Cabang Pembantu Pulau Rakyat,2.19,2.15,0.04,0.04,selisih_kecil,13,100,Cukup Baik
+5,107,KCP Tanjung Morawa,Cabang Pembantu Tanjung Morawa,2.14,2.17,-0.03,0.03,selisih_kecil,12,95,Cukup Baik
+14,120,KCP Petisah,Cabang Pembantu Petisah,2.33,2.3,0.03,0.03,selisih_kecil,13,100,Cukup Baik
+48,227,KCP Tanah Jawa,Cabang Pembantu Tanah Jawa,2.23,2.2,0.03,0.03,selisih_kecil,13,100,Cukup Baik
+90,295,KCP Pinang Sori,Cabang Pembantu Pinang Sori,2.09,2.12,-0.03,0.03,selisih_kecil,15,107.5,Cukup Baik
+92,301,KCP Perbaungan,Cabang Pembantu Perbaungan,2.36,2.39,-0.03,0.03,selisih_kecil,13,100,Cukup Baik
+99,314,KCP Kuala,Cabang Pembantu Kuala,2.05,2.08,-0.03,0.03,selisih_kecil,13,100,Cukup Baik
+119,372,KCP Talun Kenas,Cabang Pembantu Talun Kenas,1.9,1.93,-0.03,0.03,selisih_kecil,13,100,Cukup Baik
+128,621,KCPS Panyabungan,Cabang Pembantu Syariah Panyabungan,2.18,2.21,-0.03,0.03,selisih_kecil,11,90,Cukup Baik
+26,138,KCP Batang Kuis,Cabang Pembantu Batang Kuis,2.19,2.17,0.02,0.02,selisih_kecil,13,100,Cukup Baik
+34,164,KCP Johor,Cabang Pembantu Johor,2.18,2.2,-0.02,0.02,selisih_kecil,13,100,Cukup Baik
+44,223,KCP Parapat,Cabang Pembantu Parapat,2.28,2.3,-0.02,0.02,selisih_kecil,13,100,Cukup Baik
+45,224,KCP Saribu Dolok,Cabang Pembantu Saribu Dolok,2.42,2.4,0.02,0.02,selisih_kecil,15,107.5,Cukup Baik
+60,251,KCP Berastagi,Cabang Pembantu Berastagi,2.26,2.24,0.02,0.02,selisih_kecil,13,100,Cukup Baik
+61,252,KCP Tiga Binanga,Cabang Pembantu Tiga Binanga,2.17,2.15,0.02,0.02,selisih_kecil,13,100,Cukup Baik
+63,254,KCP Pasar Kabanjahe,Cabang Pembantu Pasar Kabanjahe,2.19,2.17,0.02,0.02,selisih_kecil,13,100,Cukup Baik
+68,263,KCP Bandar Pasir Mandoge,Cabang Pembantu Bandar Pasir Mandoge,1.84,1.86,-0.02,0.02,selisih_kecil,13,100,Cukup Baik
+104,322,KCP Siborong-borong,Cabang Pembantu Siborong-borong,1.92,1.94,-0.02,0.02,selisih_kecil,13,100,Cukup Baik
+105,323,KCP Tarutung,Cabang Pembantu Tarutung,2.38,2.36,0.02,0.02,selisih_kecil,13,100,Cukup Baik
+110,331,KCP Tanjung Balai,Cabang Pembantu Tanjung Balai,2.28,2.3,-0.02,0.02,selisih_kecil,15,107.5,Cukup Baik
+114,342,KCP Natal,Cabang Pembantu Natal,2.35,2.33,0.02,0.02,selisih_kecil,13,100,Cukup Baik
+1,102,KCP Kampung Baru,Cabang Pembantu Kampung Baru,1.97,1.98,-0.01,0.01,sama_rounding,13,100,Cukup Baik
+15,121,KCP Belawan,Cabang Pembantu Belawan,1.94,1.95,-0.01,0.01,sama_rounding,13,100,Cukup Baik
+16,122,KCP Sutomo,Cabang Pembantu Sutomo,2.31,2.32,-0.01,0.01,sama_rounding,13,100,Cukup Baik
+17,123,KCP Asia,Cabang Pembantu Asia,2.31,2.32,-0.01,0.01,sama_rounding,13,100,Cukup Baik
+36,213,KCP Aek Nabara,Cabang Pembantu Aek Nabara,2.32,2.33,-0.01,0.01,sama_rounding,13,100,Cukup Baik
+37,214,KCP Negeri Lama,Cabang Pembantu Negeri Lama,2.07,2.08,-0.01,0.01,sama_rounding,13,100,Cukup Baik
+43,222,KCP Sangnawaluh,Cabang Pembantu Sangnawaluh,2.18,2.17,0.01,0.01,sama_rounding,13,100,Cukup Baik
+52,235,KCP Sosa,Cabang Pembantu Sosa,2.3,2.31,-0.01,0.01,sama_rounding,13,100,Cukup Baik
+71,267,KCP Ujung Padang,Cabang Pembantu Ujung Padang,1.96,1.95,0.01,0.01,sama_rounding,13,100,Cukup Baik
+80,281,KCP Salak,Cabang Pembantu Salak,2.28,2.29,-0.01,0.01,sama_rounding,13,100,Cukup Baik
+91,296,KCP Kolang,Cabang Pembantu Kolang,2.38,2.39,-0.01,0.01,sama_rounding,13,100,Cukup Baik
+94,304,KCP Bengkel,Cabang Pembantu Bengkel,2.11,2.12,-0.01,0.01,sama_rounding,13,100,Cukup Baik
+113,341,KCP Kotanopan,Cabang Pembantu Kotanopan,2.3,2.31,-0.01,0.01,sama_rounding,13,100,Cukup Baik

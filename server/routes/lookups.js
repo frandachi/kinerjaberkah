@@ -94,16 +94,47 @@ router.get('/leaders', authenticateToken, async (req, res) => {
 
 router.get('/logs', authenticateToken, authorizeRole('superadmin', 'admin'), async (req, res) => {
   try {
-    // NOTE: the built frontend (LogTrails.js) calls `logs.map(...)` directly
-    // on this endpoint's result with no page/limit params - it expects a
-    // bare array, not a {data, pagination} envelope. Cap at a generous limit
-    // (instead of the old default 100) so the log trail view isn't silently
-    // truncated, without risking an unbounded query on a fast-growing table.
+    // Hanya admin/superadmin (authorizeRole). Frontend LogTrails mengharapkan array polos.
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 2000, 1), 5000);
     const [logs] = await db.query(
-      'SELECT * FROM activity_logs ORDER BY created_at DESC LIMIT 2000'
+      `SELECT
+         al.id,
+         al.user_id,
+         COALESCE(NULLIF(al.user_name, ''), u.name, u.username, al.user_id) AS user_name,
+         COALESCE(NULLIF(al.user_role, ''), u.role, '') AS user_role,
+         u.unit_name AS unit_name,
+         al.action,
+         al.details,
+         al.ip_address,
+         al.created_at,
+         CASE
+           WHEN al.action LIKE '%KPI%' OR al.action LIKE '%APPROVE%' OR al.action LIKE '%SUBMIT%' OR al.action LIKE '%LOCK%' THEN 'KPI'
+           WHEN al.action LIKE '%USER%' OR al.action LIKE '%ROLE%' OR al.action LIKE '%LOGIN%' OR al.action LIKE '%LOGOUT%' OR al.action LIKE '%PASSWORD%' THEN 'Akses'
+           WHEN al.action LIKE '%MUTATION%' THEN 'Mutasi'
+           WHEN al.action LIKE '%PARAM%' OR al.action LIKE '%SATUAN%' OR al.action LIKE '%POLARITAS%' THEN 'Parameter'
+           ELSE 'Sistem'
+         END AS module
+       FROM activity_logs al
+       LEFT JOIN users u ON u.id = al.user_id
+       ORDER BY al.created_at DESC
+       LIMIT ?`,
+      [limit]
     );
 
-    res.json(logs);
+    const mapped = logs.map((row) => {
+      let details = row.details;
+      if (typeof details === 'string') {
+        try {
+          const parsed = JSON.parse(details);
+          details = parsed && typeof parsed === 'object'
+            ? (parsed.message || parsed._message || details)
+            : details;
+        } catch (_) { /* keep raw */ }
+      }
+      return { ...row, details };
+    });
+
+    res.json(mapped);
   } catch (error) {
     console.error('Get logs error:', error.message);
     res.status(500).json({ message: 'Terjadi kesalahan pada server' });

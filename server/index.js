@@ -153,10 +153,13 @@ app.use(accessLogger);
 // Serve UI assets via Node so DomaiNesia cannot force max-age=2592000 on raw .js/.css
 // Optional asset path via Node (prefer PHP /assets/nocache.php?f= on DomaiNesia —
 // hosting overwrites Cache-Control for URL paths ending in .js).
+// Prefer env / sibling assets (AppRoot may live outside public_html).
 const ASSETS_ROOT = [
+  process.env.ASSETS_ROOT,
   path.resolve(__dirname, '..', 'asset-files'),
-  path.resolve(__dirname, '..', 'assets')
-].find((p) => {
+  path.resolve(__dirname, '..', 'assets'),
+  path.resolve('/home/pasiongo/public_html/kinerjaberkah/assets')
+].filter(Boolean).find((p) => {
   try { return fs.existsSync(p); } catch (_) { return false; }
 }) || path.resolve(__dirname, '..', 'assets');
 const sendAssetNoCache = (req, res, next) => {
@@ -176,7 +179,24 @@ const assetStatic = express.static(ASSETS_ROOT, {
 app.use('/api/__assets', sendAssetNoCache, assetStatic);
 app.use('/__assets', sendAssetNoCache, assetStatic);
 
-app.use('/api', apiLimiter);
+// Endpoint ringan / sering di-poll harus lolos apiLimiter.
+// Banyak user di 1 IP NAT kantor + refetch agresif mudah kena 429
+// (login captcha gagal, simpan realisasi "API Error").
+app.use('/api', (req, res, next) => {
+  const p = String(req.path || '').split('?')[0];
+  if (
+    p === '/health' ||
+    p === '/auth/captcha' ||
+    p.endsWith('/auth/captcha') ||
+    p === '/parameters/periode-kalender' ||
+    p.endsWith('/parameters/periode-kalender') ||
+    p === '/system/notifications' ||
+    p.endsWith('/system/notifications')
+  ) {
+    return next();
+  }
+  return apiLimiter(req, res, next);
+});
 
 app.get('/api/health', async (req, res) => {
   const status = {

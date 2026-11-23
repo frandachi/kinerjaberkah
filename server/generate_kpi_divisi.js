@@ -30,7 +30,7 @@ const SEMUA_DIVISI = [
   'Divisi Teknologi Informasi',
   'Divisi Treasury',
   'Divisi Umum',
-  'UKK Comercial Business Center',
+  'UKK Commercial Business Center',
   'UKK Internal Control over Financial Report',
   'Unit Anti Fraud',
   'Unit Audit Internal Syariah',

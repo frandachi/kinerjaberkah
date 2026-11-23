@@ -1,0 +1,580 @@
+{
+  "summary": {
+    "excelRows": 135,
+    "matched": 31,
+    "selisih": 104,
+    "tidakAdaDiApp": 0,
+    "appCabangTidakAdaDiExcel": 92,
+    "selisih_besar_ge_015": 18,
+    "selisih_sedang_005_015": 45,
+    "selisih_kecil_0015_005": 28,
+    "hampir_sama_lt_0015": 13,
+    "matched_plus_hampir_sama": 44
+  },
+  "top_selisih": [
+    {
+      "kode": 276,
+      "excel": "KCP Gido",
+      "app": "Cabang Pembantu Gido",
+      "skor_excel": 2.38,
+      "skor_app": 2.02,
+      "delta": 0.36,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 315,
+      "excel": "KCP Diski",
+      "app": "Cabang Pembantu Diski",
+      "skor_excel": 2.28,
+      "skor_app": 1.95,
+      "delta": 0.33,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 288,
+      "excel": "KCP Alasa (10 Agustus 2026)",
+      "app": "Cabang Pembantu Alasa",
+      "skor_excel": 2.06,
+      "skor_app": 1.75,
+      "delta": 0.31,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 274,
+      "excel": "KCP Pulau Tello",
+      "app": "Cabang Pembantu Pulau Tello",
+      "skor_excel": 2.55,
+      "skor_app": 2.25,
+      "delta": 0.3,
+      "bobot_app": 100,
+      "kategori_excel": "Baik"
+    },
+    {
+      "kode": 218,
+      "excel": "KCP Sigambal",
+      "app": "Cabang Pembantu Sigambal",
+      "skor_excel": 2.29,
+      "skor_app": 2.01,
+      "delta": 0.28,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 229,
+      "excel": "KCP Sinaksak",
+      "app": "Cabang Pembantu Sinaksak",
+      "skor_excel": 2.19,
+      "skor_app": 1.92,
+      "delta": 0.27,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 287,
+      "excel": "KCP Kualuh Leidong (25 Mei 2026)",
+      "app": "Cabang Pembantu Kualuh Leidong",
+      "skor_excel": 2.06,
+      "skor_app": 1.8,
+      "delta": 0.26,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 292,
+      "excel": "KCP Barus",
+      "app": "Cabang Pembantu Barus",
+      "skor_excel": 2.34,
+      "skor_app": 2.08,
+      "delta": 0.26,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 144,
+      "excel": "KCP Kelambir Lima",
+      "app": "Cabang Pembantu Kelambir Lima",
+      "skor_excel": 2.25,
+      "skor_app": 2,
+      "delta": 0.25,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 286,
+      "excel": "KCP Sei Berombang (11 Februari 2026)",
+      "app": "Cabang Pembantu Sei Berombang",
+      "skor_excel": 2.19,
+      "skor_app": 1.96,
+      "delta": 0.23,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 215,
+      "excel": "KCP Kampung Pajak",
+      "app": "Cabang Pembantu Kampung Pajak",
+      "skor_excel": 2.23,
+      "skor_app": 2.01,
+      "delta": 0.22,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 236,
+      "excel": "KCP Sadabuan",
+      "app": "Cabang Pembantu Sadabuan",
+      "skor_excel": 1.96,
+      "skor_app": 2.16,
+      "delta": -0.2,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 317,
+      "excel": "KCP Pasar Tavip",
+      "app": "Cabang Pembantu Pasar Tavip",
+      "skor_excel": 2.26,
+      "skor_app": 2.07,
+      "delta": 0.19,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 259,
+      "excel": "KCP Saipar Dolok Hole (Nov 2025)",
+      "app": "Cabang Pembantu Saipar Dolok Hole",
+      "skor_excel": 2.25,
+      "skor_app": 2.07,
+      "delta": 0.18,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 237,
+      "excel": "KCP Sangkumpal Bonang",
+      "app": "Cabang Pembantu Sangkumpal Bonang",
+      "skor_excel": 2.06,
+      "skor_app": 1.89,
+      "delta": 0.17,
+      "bobot_app": 107.5,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 249,
+      "excel": "KCP Hutaraja Tinggi",
+      "app": "Cabang Pembantu Hutaraja Tinggi",
+      "skor_excel": 2.06,
+      "skor_app": 1.89,
+      "delta": 0.17,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 228,
+      "excel": "KCP Pasar Dwikora Parluasan",
+      "app": "Cabang Pembantu Pasar Dwikora Parluasan",
+      "skor_excel": 2.04,
+      "skor_app": 1.88,
+      "delta": 0.16,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 633,
+      "excel": "KCPS Kampung Pon",
+      "app": "Cabang Pembantu Syariah Kampung Pon",
+      "skor_excel": 2.25,
+      "skor_app": 2.4,
+      "delta": -0.15,
+      "bobot_app": 90,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 232,
+      "excel": "KCP Batang Toru",
+      "app": "Cabang Pembantu Batang Toru",
+      "skor_excel": 2.15,
+      "skor_app": 2.01,
+      "delta": 0.14,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 273,
+      "excel": "KCP Lahomi",
+      "app": "Cabang Pembantu Lahomi",
+      "skor_excel": 2.77,
+      "skor_app": 2.63,
+      "delta": 0.14,
+      "bobot_app": 100,
+      "kategori_excel": "Baik"
+    },
+    {
+      "kode": 329,
+      "excel": "KCP Bahorok",
+      "app": "Cabang Pembantu Bahorok",
+      "skor_excel": 2.11,
+      "skor_app": 1.97,
+      "delta": 0.14,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 618,
+      "excel": "KCPS Marelan Raya",
+      "app": "Cabang Pembantu Syariah Marelan Raya",
+      "skor_excel": 1.8,
+      "skor_app": 1.93,
+      "delta": -0.13,
+      "bobot_app": 90,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 631,
+      "excel": "KCPS Lubuk Pakam",
+      "app": "Cabang Pembantu Syariah Lubuk Pakam",
+      "skor_excel": 2.09,
+      "skor_app": 2.22,
+      "delta": -0.13,
+      "bobot_app": 90,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 615,
+      "excel": "KCPS Binjai",
+      "app": "Cabang Pembantu Syariah Binjai",
+      "skor_excel": 2.07,
+      "skor_app": 2.19,
+      "delta": -0.12,
+      "bobot_app": 90,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 225,
+      "excel": "KCP Sudirman Raya",
+      "app": "Cabang Pembantu Sudirman Raya",
+      "skor_excel": 2.15,
+      "skor_app": 2.04,
+      "delta": 0.11,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 265,
+      "excel": "KCP Air Joman",
+      "app": "Cabang Pembantu Air Joman",
+      "skor_excel": 2.13,
+      "skor_app": 2.24,
+      "delta": -0.11,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 284,
+      "excel": "KCP Pasar Sidikalang",
+      "app": "Cabang Pembantu Pasar Sidikalang",
+      "skor_excel": 2.14,
+      "skor_app": 2.03,
+      "delta": 0.11,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 312,
+      "excel": "KCP Pangkalan Brandan",
+      "app": "Cabang Pembantu Pangkalan Brandan",
+      "skor_excel": 2.12,
+      "skor_app": 2.01,
+      "delta": 0.11,
+      "bobot_app": 107.5,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 617,
+      "excel": "KCPS HM Yamin",
+      "app": "Cabang Pembantu Syariah HM Yamin",
+      "skor_excel": 1.92,
+      "skor_app": 2.03,
+      "delta": -0.11,
+      "bobot_app": 90,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 272,
+      "excel": "KCP Lotu",
+      "app": "Cabang Pembantu Lotu",
+      "skor_excel": 2.4,
+      "skor_app": 2.3,
+      "delta": 0.1,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 328,
+      "excel": "KCP Batang Serangan",
+      "app": "Cabang Pembantu Batang Serangan",
+      "skor_excel": 2.11,
+      "skor_app": 2.01,
+      "delta": 0.1,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 346,
+      "excel": "KCP Sinunukan",
+      "app": "Cabang Pembantu Sinunukan",
+      "skor_excel": 1.99,
+      "skor_app": 1.89,
+      "delta": 0.1,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 361,
+      "excel": "KCP Tigarunggu (04 Agt 2025)",
+      "app": "Cabang Pembantu Tigarunggu",
+      "skor_excel": 2.32,
+      "skor_app": 2.22,
+      "delta": 0.1,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 619,
+      "excel": "KCPS Hamparan Perak",
+      "app": "Cabang Pembantu Syariah Hamparan Perak",
+      "skor_excel": 1.96,
+      "skor_app": 2.06,
+      "delta": -0.1,
+      "bobot_app": 90,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 662,
+      "excel": "KCPS Rantau Prapat",
+      "app": "Cabang Pembantu Syariah Rantau Prapat",
+      "skor_excel": 1.92,
+      "skor_app": 2.02,
+      "delta": -0.1,
+      "bobot_app": 90,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 130,
+      "excel": "KCP Beringin",
+      "app": "Cabang Pembantu Beringin",
+      "skor_excel": 1.88,
+      "skor_app": 1.79,
+      "delta": 0.09,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 245,
+      "excel": "KCP Laguboti",
+      "app": "Cabang Pembantu Laguboti",
+      "skor_excel": 2.3,
+      "skor_app": 2.21,
+      "delta": 0.09,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 278,
+      "excel": "KCP Lolowau",
+      "app": "Cabang Pembantu Lolowau",
+      "skor_excel": 2.22,
+      "skor_app": 2.13,
+      "delta": 0.09,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 303,
+      "excel": "KCP Dolok Masihul",
+      "app": "Cabang Pembantu Dolok Masihul",
+      "skor_excel": 2.37,
+      "skor_app": 2.28,
+      "delta": 0.09,
+      "bobot_app": 100,
+      "kategori_excel": "Cukup Baik"
+    },
+    {
+      "kode": 611,
+      "excel": "KCPS Multatuli",
+      "app": "Cabang Pembantu Syariah Multatuli",
+      "skor_excel": 2.09,
+      "skor_app": 2,
+      "delta": 0.09,
+      "bobot_app": 90,
+      "kategori_excel": "Cukup Baik"
+    }
+  ],
+  "selisih_besar": [
+    {
+      "kode": 276,
+      "excel": "KCP Gido",
+      "app": "Cabang Pembantu Gido",
+      "skor_excel": 2.38,
+      "skor_app": 2.02,
+      "delta": 0.36,
+      "bobot_app": 100
+    },
+    {
+      "kode": 315,
+      "excel": "KCP Diski",
+      "app": "Cabang Pembantu Diski",
+      "skor_excel": 2.28,
+      "skor_app": 1.95,
+      "delta": 0.33,
+      "bobot_app": 100
+    },
+    {
+      "kode": 288,
+      "excel": "KCP Alasa (10 Agustus 2026)",
+      "app": "Cabang Pembantu Alasa",
+      "skor_excel": 2.06,
+      "skor_app": 1.75,
+      "delta": 0.31,
+      "bobot_app": 100
+    },
+    {
+      "kode": 274,
+      "excel": "KCP Pulau Tello",
+      "app": "Cabang Pembantu Pulau Tello",
+      "skor_excel": 2.55,
+      "skor_app": 2.25,
+      "delta": 0.3,
+      "bobot_app": 100
+    },
+    {
+      "kode": 218,
+      "excel": "KCP Sigambal",
+      "app": "Cabang Pembantu Sigambal",
+      "skor_excel": 2.29,
+      "skor_app": 2.01,
+      "delta": 0.28,
+      "bobot_app": 100
+    },
+    {
+      "kode": 229,
+      "excel": "KCP Sinaksak",
+      "app": "Cabang Pembantu Sinaksak",
+      "skor_excel": 2.19,
+      "skor_app": 1.92,
+      "delta": 0.27,
+      "bobot_app": 100
+    },
+    {
+      "kode": 287,
+      "excel": "KCP Kualuh Leidong (25 Mei 2026)",
+      "app": "Cabang Pembantu Kualuh Leidong",
+      "skor_excel": 2.06,
+      "skor_app": 1.8,
+      "delta": 0.26,
+      "bobot_app": 100
+    },
+    {
+      "kode": 292,
+      "excel": "KCP Barus",
+      "app": "Cabang Pembantu Barus",
+      "skor_excel": 2.34,
+      "skor_app": 2.08,
+      "delta": 0.26,
+      "bobot_app": 100
+    },
+    {
+      "kode": 144,
+      "excel": "KCP Kelambir Lima",
+      "app": "Cabang Pembantu Kelambir Lima",
+      "skor_excel": 2.25,
+      "skor_app": 2,
+      "delta": 0.25,
+      "bobot_app": 100
+    },
+    {
+      "kode": 286,
+      "excel": "KCP Sei Berombang (11 Februari 2026)",
+      "app": "Cabang Pembantu Sei Berombang",
+      "skor_excel": 2.19,
+      "skor_app": 1.96,
+      "delta": 0.23,
+      "bobot_app": 100
+    },
+    {
+      "kode": 215,
+      "excel": "KCP Kampung Pajak",
+      "app": "Cabang Pembantu Kampung Pajak",
+      "skor_excel": 2.23,
+      "skor_app": 2.01,
+      "delta": 0.22,
+      "bobot_app": 100
+    },
+    {
+      "kode": 236,
+      "excel": "KCP Sadabuan",
+      "app": "Cabang Pembantu Sadabuan",
+      "skor_excel": 1.96,
+      "skor_app": 2.16,
+      "delta": -0.2,
+      "bobot_app": 100
+    },
+    {
+      "kode": 317,
+      "excel": "KCP Pasar Tavip",
+      "app": "Cabang Pembantu Pasar Tavip",
+      "skor_excel": 2.26,
+      "skor_app": 2.07,
+      "delta": 0.19,
+      "bobot_app": 100
+    },
+    {
+      "kode": 259,
+      "excel": "KCP Saipar Dolok Hole (Nov 2025)",
+      "app": "Cabang Pembantu Saipar Dolok Hole",
+      "skor_excel": 2.25,
+      "skor_app": 2.07,
+      "delta": 0.18,
+      "bobot_app": 100
+    },
+    {
+      "kode": 237,
+      "excel": "KCP Sangkumpal Bonang",
+      "app": "Cabang Pembantu Sangkumpal Bonang",
+      "skor_excel": 2.06,
+      "skor_app": 1.89,
+      "delta": 0.17,
+      "bobot_app": 107.5
+    },
+    {
+      "kode": 249,
+      "excel": "KCP Hutaraja Tinggi",
+      "app": "Cabang Pembantu Hutaraja Tinggi",
+      "skor_excel": 2.06,
+      "skor_app": 1.89,
+      "delta": 0.17,
+      "bobot_app": 100
+    },
+    {
+      "kode": 228,
+      "excel": "KCP Pasar Dwikora Parluasan",
+      "app": "Cabang Pembantu Pasar Dwikora Parluasan",
+      "skor_excel": 2.04,
+      "skor_app": 1.88,
+      "delta": 0.16,
+      "bobot_app": 100
+    },
+    {
+      "kode": 633,
+      "excel": "KCPS Kampung Pon",
+      "app": "Cabang Pembantu Syariah Kampung Pon",
+      "skor_excel": 2.25,
+      "skor_app": 2.4,
+      "delta": -0.15,
+      "bobot_app": 90
+    }
+  ]
+}

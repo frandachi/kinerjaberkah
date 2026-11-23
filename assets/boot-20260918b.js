@@ -18,80 +18,71 @@
 })();
 
 (async function () {
-  // Single AuthContext: always load canon AQ only. Refresh shim/chunk HTTP
-  // cache every boot so DomaiNesia's 30-day max-age cannot keep a stale full
-  // copy of index-CdyJlLvK/O (which caused "useAuth must be used within AuthProvider").
+  // Single AuthContext: always load canon AQ only.
+  // Hanya bust cache file kritis saat VERSION berubah — jangan unduh ulang
+  // puluhan MB (MonthLine 650KB, dll) di setiap deploy.
   const BASE = "/kinerjaberkah/assets/";
   const CANON = "index-CdyJlLvAQ.js";
-  const VERSION = "20261005i";
+  const VERSION = "20261122d";
+  try { localStorage.removeItem("kb_periode_settings"); } catch {}
   const LS_KEY = "kb_index_cache_v";
 
-  const SHIM_SUFFIXES = [
-    "K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z",
-    "AA","AB","AC","AD","AE","AF","AG","AH","AI","AJ","AK","AL","AM","AN","AO","AP",
-  ];
-  const SHIMS = SHIM_SUFFIXES.map((s) => BASE + "index-CdyJlLv" + s + ".js").concat([
+  // Minimal set: auth canon + modul yang sering salah-cache setelah deploy satuan/target
+  const SHIMS = [
     BASE + CANON,
-    BASE + "PenggunaAkses-UserFix01.js",
-    BASE + "unit-kantor-DMQ7qF6z.js",
-    BASE + "DataPegawai-B5fDELoN.js",
-    BASE + "MutasiPegawai-BndmMgt3.js",
-    BASE + "KPIIndividu-MonthLine03.js",
-    BASE + "PageHeader-DdzXL2rh.js",
+    BASE + "index-CdyJlLvO.js",
     BASE + "Login-OMbfbvvI.js",
-    BASE + "UploadKpiMutasi-Manual01.js",
-    BASE + "FileEvidence-Manual01.js",
-    BASE + "KPIIndividu-MonthLine03.js",
-    BASE + "kpi-polarity-Zero01.js",
+    BASE + "boot-20260918b.js",
+    BASE + "kpi-units-Bpgxx_sX.js",
     BASE + "kpi-polarity-Zero02.js",
-    BASE + "orgLevel-DzZJ66Xo.js",
-    BASE + "Dashboard-Score01.js",
-    BASE + "LaporanAnalisis-Export01.js",
-    BASE + "KpiIndividuExport-Card01.js",
-    BASE + "kpi-individu-export-Core01.js",
-    BASE + "kpi-scoring-Zero01.js",
     BASE + "kpi-scoring-Zero03.js",
-    BASE + "kpi-summary-zp-GQLPf.js",
     BASE + "kpi-summary-Zero03.js",
-    BASE + "KpiIndeksPredikatTable-Fit01.js",
-    BASE + "KonsolidasiUnit-Wrap01.js",
-    BASE + "Scorecard-B7oCx77H.js",
-    BASE + "KPIUnit-Score01.js",
-    BASE + "OKRJabatan-PerfList01.js",
-    BASE + "Panduan-D7yiiD2P.js",
-    BASE + "KpiManagement-Catalog07.js",
-    BASE + "index-CdyJlLvAQ.js",
-  ]);
+    BASE + "DeleteConfirmDialog-Manual14.js",
+    BASE + "KPIUnitKantor-Pemimpin01.js",
+    BASE + "kpi-individu-export-Core01.js",
+    BASE + "LaporanAnalisis-Export04.js",
+    BASE + "Dashboard-Score01.js",
+    BASE + "KPIIndividu-MonthLine03.js",
+    BASE + "kpi-individu-parser-Npp01.js",
+    BASE + "Dashboard-Score01.js",
+    BASE + "orgLevel-DzZJ66Xo.js",
+    BASE + "UploadExcel-NppMatch02.js",
+    BASE + "unit-kantor-DMQ7qF6z.js",
+    BASE + "DataPegawai-PermUnit01.js",
+  ];
 
-  async function refreshShims() {
-    await Promise.all(
-      SHIMS.map((u) => fetch(u, { cache: "reload", credentials: "same-origin" }).catch(() => null))
-    );
+  function refreshShims() {
+    // Fire-and-forget, jangan block render
+    SHIMS.forEach((u) => {
+      try { fetch(u, { cache: "reload", credentials: "same-origin" }).catch(() => null); } catch {}
+    });
   }
 
-  // Always revalidate critical modules (CDN ignores no-cache headers)
-  try { await refreshShims(); } catch {}
-
+  let versionChanged = false;
   try {
     const prev = localStorage.getItem(LS_KEY);
     if (prev !== VERSION) {
+      versionChanged = true;
       localStorage.setItem(LS_KEY, VERSION);
       if (prev) {
+        try { await Promise.all(SHIMS.map((u) => fetch(u, { cache: "reload", credentials: "same-origin" }).catch(() => null))); } catch {}
         location.reload();
         return;
       }
+      refreshShims();
     }
   } catch {}
 
+  // Soft path: langsung mount — jangan no-cache fetch yang menunda login/app
+  // Jangan pakai ?v= di import (bisa dual AuthContext / modul dobel).
   const canon = await import("./" + CANON);
-  // Guard: if a stale shim somehow still exposes a different useAuth, hard reload once
   try {
     const viaO = await import("./index-CdyJlLvO.js").catch(() => null);
     if (viaO && viaO.u && canon.u && viaO.u !== canon.u) {
       const k = "kb_auth_dual_reload";
       if (sessionStorage.getItem(k) !== VERSION) {
         sessionStorage.setItem(k, VERSION);
-        await refreshShims();
+        refreshShims();
         location.reload();
         return;
       }

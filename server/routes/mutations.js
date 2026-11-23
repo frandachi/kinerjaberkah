@@ -419,6 +419,130 @@ router.post('/:id/cancel', authenticateToken, authorizeRole('superadmin', 'admin
   }
 });
 
+async function isLatestActiveMutation(m) {
+  if (m.status !== 'active') return false;
+  const [latest] = await db.query(
+    `SELECT id FROM mutation_history
+     WHERE pegawai_id = ? AND status = 'active'
+     ORDER BY effective_date DESC, id DESC LIMIT 1`,
+    [m.pegawai_id]
+  );
+  return latest.length > 0 && Number(latest[0].id) === Number(m.id);
+}
+
+function toDateOnly(value) {
+  if (!value) return null;
+  if (value instanceof Date) {
+    const p = (n) => String(n).padStart(2, '0');
+    return `${value.getFullYear()}-${p(value.getMonth() + 1)}-${p(value.getDate())}`;
+  }
+  const s = String(value).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+}
+
+router.put('/:id', authenticateToken, authorizeRole('superadmin', 'admin'), auditMiddleware('UPDATE_MUTATION'), async (req, res) => {
+  try {
+    await ensureMutationSchema();
+    const [rows] = await db.query('SELECT * FROM mutation_history WHERE id = ?', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ message: 'Mutasi tidak ditemukan' });
+    const m = parseMutationRow(rows[0]);
+    const body = req.body || {};
+    const str = (v) => String(v ?? '').trim();
+
+    const effective = body.effective_date !== undefined ? toDateOnly(body.effective_date) : toDateOnly(m.effective_date);
+    const newUnit = body.new_unit_name !== undefined ? str(body.new_unit_name) : m.new_unit_name;
+    const newJabatan = body.new_jabatan !== undefined ? str(body.new_jabatan) : m.new_jabatan;
+    if (!effective || !newUnit || !newJabatan) {
+      return res.status(400).json({ message: 'Tanggal efektif, unit & jabatan tujuan wajib diisi' });
+    }
+
+    const set = {
+      mutation_type: body.mutation_type !== undefined ? str(body.mutation_type) || 'Mutasi' : m.mutation_type,
+      reason: body.reason !== undefined ? str(body.reason) || null : m.reason || null,
+      sk_number: body.sk_number !== undefined ? str(body.sk_number) || null : m.sk_number || null,
+      notes: body.notes !== undefined ? str(body.notes) || null : m.notes || null,
+      new_unit_type: body.new_unit_type !== undefined ? str(body.new_unit_type) || m.new_unit_type : m.new_unit_type,
+      new_unit_name: newUnit,
+      new_jabatan: newJabatan,
+    };
+
+    if (effective !== toDateOnly(m.effective_date)) {
+      const year = Number(effective.slice(0, 4));
+      const dayBefore = new Date(`${effective}T00:00:00Z`);
+      dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
+      set.effective_date = effective;
+      set.old_period_end = dayBefore.toISOString().slice(0, 10);
+      set.new_period_start = effective;
+      if (year !== Number(String(toDateOnly(m.effective_date) || '').slice(0, 4))) {
+        set.old_period_start = `${year}-01-01`;
+        set.new_period_end = `${year}-12-31`;
+      }
+    }
+
+    const targetChanged = newUnit !== m.new_unit_name || newJabatan !== m.new_jabatan;
+    if (targetChanged) {
+      const [existing] = await db.query(
+        "SELECT id FROM kpis WHERE unit_name = ? AND jabatan = ? AND COALESCE(unit_type, '') <> 'master'",
+        [newUnit, newJabatan]
+      );
+      if (existing.length) {
+        set.new_kpi_ids = JSON.stringify(existing.map((k) => k.id));
+      } else if (m.new_kpi_ids.length) {
+        // KPI setelah mutasi ikut pindah ke unit/jabatan tujuan yang baru.
+        await db.query(
+          `UPDATE kpis SET unit_name = ?, jabatan = ? WHERE id IN (?) AND unit_name = ? AND jabatan = ?`,
+          [newUnit, newJabatan, m.new_kpi_ids, m.new_unit_name, m.new_jabatan]
+        );
+      }
+    }
+
+    const fields = Object.keys(set);
+    await db.query(
+      `UPDATE mutation_history SET ${fields.map((f) => `${f} = ?`).join(', ')} WHERE id = ?`,
+      [...fields.map((f) => set[f]), m.id]
+    );
+
+    if (targetChanged && (await isLatestActiveMutation(m))) {
+      await db.query('UPDATE pegawai SET unit_name = ?, jabatan = ? WHERE id = ?', [newUnit, newJabatan, m.pegawai_id]);
+      await db.query('UPDATE users SET unit_name = ?, jabatan = ? WHERE pegawai_id = ?', [newUnit, newJabatan, m.pegawai_id]);
+    }
+
+    const [updated] = await db.query('SELECT * FROM mutation_history WHERE id = ?', [m.id]);
+    res.json({ success: true, message: 'Mutasi diperbarui', mutation: parseMutationRow(updated[0]) });
+  } catch (error) {
+    console.error('Update mutation error:', error.message);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server: ' + error.message });
+  }
+});
+
+router.delete('/:id', authenticateToken, authorizeRole('superadmin', 'admin'), auditMiddleware('DELETE_MUTATION'), async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT * FROM mutation_history WHERE id = ?', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ message: 'Mutasi tidak ditemukan' });
+    const m = parseMutationRow(rows[0]);
+    const restore = await isLatestActiveMutation(m);
+
+    await db.query('DELETE FROM mutation_history WHERE id = ?', [m.id]);
+
+    if (restore) {
+      await db.query('UPDATE pegawai SET unit_name = ?, jabatan = ? WHERE id = ?', [m.old_unit_name, m.old_jabatan, m.pegawai_id]);
+      await db.query('UPDATE users SET unit_name = ?, jabatan = ? WHERE pegawai_id = ?', [m.old_unit_name, m.old_jabatan, m.pegawai_id]);
+      if (m.old_kpi_ids.length) {
+        await db.query('UPDATE kpis SET is_locked = 0 WHERE id IN (?)', [m.old_kpi_ids]);
+      }
+    }
+
+    res.json({
+      success: true,
+      restored: restore,
+      message: restore ? 'Mutasi dihapus, pegawai dikembalikan ke unit asal' : 'Mutasi dihapus',
+    });
+  } catch (error) {
+    console.error('Delete mutation error:', error.message);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+  }
+});
+
 router.get('/:pegawai_id', authenticateToken, async (req, res) => {
   try {
     if (!(await assertPegawaiAccess(req, res, db, req.params.pegawai_id))) return;

@@ -36,7 +36,7 @@ const groups = [
     ]
   },
   {
-    units: ['Divisi SME & Commercial', 'Divisi Kredit Konsumer', 'UKK Comercial Business Center'],
+    units: ['Divisi SME & Commercial', 'Divisi Kredit Konsumer', 'UKK Commercial Business Center'],
     kpis: [
       { p: 'financial', o: 'F2. Mengoptimalkan Pertumbuhan Pendapatan Bunga dan Non-Bunga Secara Berkelanjutan', k: 'F2.2 Rp Total Pendapatan Bunga Kredit', w: 10, u: 'Rp', t: '100%' },
       { p: 'financial', o: 'F3. Meningkatkan Efisiensi Operasional Melalui Pengendalian Rasio Biaya Terhadap Pendapatan', k: 'F3.1. % Rasio Biaya Terhadap Pendapatan (Cost to Income Ratio / CIR)', w: 10, u: '%', t: '<= 75%' },

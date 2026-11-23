@@ -1,0 +1,12 @@
+{
+  "dumped_at": "2026-11-23T07:42:00.000Z",
+  "source": "prod pasiongov.com/kinerjaberkah",
+  "kpis_rows": 3529,
+  "manual_indeks": {
+    "Field": "manual_indeks",
+    "Type": "decimal(10,6)",
+    "Null": "YES",
+    "Default": null
+  },
+  "note": "Prod snapshot after formula scoring + manual_indeks cleared on unit scorecards. Files: schema.sql, kpis.json.gz"
+}

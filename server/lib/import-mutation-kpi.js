@@ -70,11 +70,19 @@ function convertWeight(raw) {
   return n;
 }
 
-function convertValue(raw, unit) {
+function isNplGrossName(name) {
+  return /\bnpl\b/i.test(String(name || '')) && /gross/i.test(String(name || ''));
+}
+
+function convertValue(raw, unit, kpiName = '') {
   const n = parseNumberLoose(raw);
   if (n == null) return null;
-  if (isPercentUnit(unit) && Math.abs(n) <= 1) {
-    return Math.round(n * 10000) / 100;
+  if (isPercentUnit(unit)) {
+    if (isNplGrossName(kpiName)) {
+      if (Math.abs(n) > 0 && Math.abs(n) <= 0.05) return Math.round(n * 10000) / 100;
+      return n;
+    }
+    if (Math.abs(n) <= 1) return Math.round(n * 10000) / 100;
   }
   return n;
 }
@@ -193,14 +201,14 @@ function parseSheet(ws, sheetLabel) {
     const unit = normalizeUnit(r[6]);
     const weight = convertWeight(r[7]);
     const yearlyTargetRaw = r[8];
-    let yearlyTarget = convertValue(yearlyTargetRaw, unit);
+    let yearlyTarget = convertValue(yearlyTargetRaw, unit, kpiName);
     if (yearlyTarget == null) yearlyTarget = parseNumberLoose(yearlyTargetRaw) ?? 0;
 
     const monthly_data = {};
     const monthly_target = {};
     for (const [month, cols] of Object.entries(monthMap)) {
-      const rv = convertValue(r[cols.realCol], unit);
-      const tv = convertValue(r[cols.targetCol], unit);
+      const rv = convertValue(r[cols.realCol], unit, kpiName);
+      const tv = convertValue(r[cols.targetCol], unit, kpiName);
       if (rv != null) monthly_data[month] = String(rv);
       if (tv != null) monthly_target[month] = String(tv);
     }

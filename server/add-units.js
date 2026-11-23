@@ -14,7 +14,7 @@ async function addUnits() {
       'Departemen Hukum',
       'Departemen Marketing Communication',
       'Departemen Perlindungan Konsumen',
-      'UKK Comercial Business Center',
+      'UKK Commercial Business Center',
       'UKK Internal Control over Financial Report',
       'Unit Audit Internal Syariah',
       'Unit Keamanan dan Ketahan Siber',

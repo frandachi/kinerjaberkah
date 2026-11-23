@@ -10,7 +10,7 @@ export const UNIT_TYPES = [
   { value: "departemen", label: "Departemen" },
   { value: "ukk", label: "UKK" },
   { value: "unit", label: "Unit" },
-  { value: "koordinator", label: "Cabang Koordinator" },
+  { value: "koordinator", label: "Cabang Utama" },
   { value: "cabang", label: "Cabang" },
   { value: "pembantu", label: "Cabang Pembantu" },
 ];
@@ -25,8 +25,8 @@ export function matchUnitType(unitName, type) {
     departemen: () => e.includes("departemen"),
     ukk: () => e.includes("ukk"),
     unit: () => e.startsWith("unit"),
-    koordinator: () => e.includes("cabang koordinator"),
-    cabang: () => e.includes("cabang") && !e.includes("koordinator") && !e.includes("pembantu") && !e.includes("capem"),
+    koordinator: () => e.includes("cabang utama") || e.includes("cabang koordinator"),
+    cabang: () => e.includes("cabang") && !e.includes("koordinator") && !e.includes("utama") && !e.includes("pembantu") && !e.includes("capem"),
     pembantu: () => e.includes("cabang pembantu") || e.includes("capem"),
   };
   return rules[type] ? rules[type]() : true;
@@ -44,13 +44,21 @@ function parseJson(v) {
   }
 }
 
+export function bobotLabel(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "—";
+  const r = Math.round(n * 100) / 100;
+  return r.toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+}
+
 export function fmtValue(v, unit) {
   if (v == null || v === "") return "-";
   const n = Number(v);
   if (Number.isNaN(n)) return String(v);
   const u = normUnit(unit);
-  const s = n.toLocaleString("id-ID", { maximumFractionDigits: 2 });
-  return u === "percentage" ? `${s}%` : s;
+  const r = Math.round((n + Number.EPSILON) * 100) / 100;
+  if (u === "percentage") return r.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
+  return r.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export function fmtPct(v) {
@@ -121,7 +129,7 @@ export function buildReport(p, kpis) {
       name: name.startsWith("-") ? name.slice(1).trim() : name,
       unit: k.unit,
       unitKind: unit,
-      weight: k.weight ?? null,
+      weight: Number.isFinite(Number(k.weight)) ? Number(bobotLabel(k.weight)) : null,
       target: k.target != null && k.target !== "" ? Number(k.target) : null,
       months,
       scored,
@@ -169,8 +177,17 @@ export function buildReports(pegawaiList, kpis, { unitType = "all", unitName = "
 
 const MONTH_HEAD = MONTHS;
 
-function infoRows(r, year) {
+function infoRows(r, year, kind = "individu") {
   const p = r.pegawai;
+  if (kind === "unit") {
+    return [
+      [`KPI Unit Tahun ${year}`],
+      ["Unit Kantor", p.unit_name || ""],
+      ["Tipe", p.tipe || ""],
+      ["Jabatan", p.jabatan || ""],
+      ["Pemimpin", p.name || ""],
+    ];
+  }
   return [
     [`KPI Individu Tahun ${year}`],
     ["Nama", p.name || ""],
@@ -180,9 +197,13 @@ function infoRows(r, year) {
   ];
 }
 
-function sheetName(r, used) {
+function sheetName(r, used, kind = "individu") {
   const p = r.pegawai;
-  const base = `${String(p.npp || "").split(".")[0]} ${p.name || ""}`.replace(/[\[\]:*?\/\\]/g, "").trim().slice(0, 31) || "Pegawai";
+  const raw =
+    kind === "unit"
+      ? p.unit_name || p.name || "Unit"
+      : `${String(p.npp || "").split(".")[0]} ${p.name || ""}`;
+  const base = String(raw).replace(/[\[\]:*?\/\\]/g, "").trim().slice(0, 31) || (kind === "unit" ? "Unit" : "Pegawai");
   let name = base, i = 2;
   while (used.has(name.toLowerCase())) name = `${base.slice(0, 27)} (${i++})`;
   used.add(name.toLowerCase());
@@ -221,25 +242,45 @@ function xsIndeks(cell, indeks) {
   cell.s.font = { ...(cell.s.font || {}), bold: true, color: { rgb: c.font } };
 }
 
-export function buildWorkbook(XU, reports, year) {
+export function buildWorkbook(XU, reports, year, opts = {}) {
+  const kind = opts.kind === "unit" ? "unit" : "individu";
   const wb = XU.book_new();
+  const summaryHead =
+    kind === "unit"
+      ? ["No", "Unit Kantor", "Tipe", "Jabatan", "Pemimpin", "Jumlah KPI", "Total Bobot (%)", "YTD (%)", "Skor", "Status"]
+      : ["No", "NPP", "Nama", "Jabatan", "Unit Kerja", "Jumlah KPI", "Total Bobot (%)", "YTD (%)", "Skor", "Status"];
   const summary = [
-    [`Ringkasan KPI Individu Tahun ${year}`],
+    [`Ringkasan KPI ${kind === "unit" ? "Unit" : "Individu"} Tahun ${year}`],
     [`Diekspor: ${new Date().toLocaleString("id-ID")}`],
     [],
-    ["No", "NPP", "Nama", "Jabatan", "Unit Kerja", "Jumlah KPI", "Total Bobot (%)", "YTD (%)", "Skor", "Status"],
-    ...reports.map((r, i) => [
-      i + 1,
-      r.pegawai.npp || "",
-      r.pegawai.name || "",
-      r.pegawai.jabatan || "",
-      r.pegawai.unit_name || "",
-      r.rows.length,
-      r.totals.totalBobot,
-      r.totals.avgYtd > 0 ? round(r.totals.avgYtd, 1) : null,
-      round(r.totals.totalSkor, 2),
-      r.totals.status,
-    ]),
+    summaryHead,
+    ...reports.map((r, i) =>
+      kind === "unit"
+        ? [
+            i + 1,
+            r.pegawai.unit_name || "",
+            r.pegawai.tipe || "",
+            r.pegawai.jabatan || "",
+            r.pegawai.name || "",
+            r.rows.length,
+            r.totals.totalBobot,
+            r.totals.avgYtd > 0 ? round(r.totals.avgYtd, 1) : null,
+            round(r.totals.totalSkor, 2),
+            r.totals.status,
+          ]
+        : [
+            i + 1,
+            r.pegawai.npp || "",
+            r.pegawai.name || "",
+            r.pegawai.jabatan || "",
+            r.pegawai.unit_name || "",
+            r.rows.length,
+            r.totals.totalBobot,
+            r.totals.avgYtd > 0 ? round(r.totals.avgYtd, 1) : null,
+            round(r.totals.totalSkor, 2),
+            r.totals.status,
+          ]
+    ),
   ];
   const ws0 = XU.aoa_to_sheet(summary);
   ws0["!cols"] = [6, 26, 30, 40, 40, 11, 14, 10, 8, 12].map((wch) => ({ wch }));
@@ -259,7 +300,7 @@ export function buildWorkbook(XU, reports, year) {
 
   const used = new Set(["ringkasan"]);
   reports.forEach((r) => {
-    const head = infoRows(r, year);
+    const head = infoRows(r, year, kind);
     const h0 = head.length + 1;
     const top = ["No", "Perspektif", "KPI", "Satuan", "Bobot (%)", `Target Tahun ${year}`];
     const sub = ["", "", "", "", "", ""];
@@ -342,7 +383,7 @@ export function buildWorkbook(XU, reports, year) {
     ws["!rows"] = [];
     ws["!rows"][h0] = { hpt: 20 };
     ws["!rows"][h0 + 1] = { hpt: 18 };
-    XU.book_append_sheet(wb, ws, sheetName(r, used));
+    XU.book_append_sheet(wb, ws, sheetName(r, used, kind));
   });
   return wb;
 }
@@ -592,4 +633,161 @@ export function buildPdf(JsPDF, reports, year, paper = "a4") {
 
 export function safeFilePart(s) {
   return String(s || "").replace(/[^\w\s.-]/g, "").trim().replace(/\s+/g, "_") || "Semua";
+}
+
+const BULAN_FULL = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+];
+
+/** Label bulan penuh untuk header "Nilai periode …" (default: bulan terakhir yang sudah ditutup, WIB). */
+export function nilaiPeriodeMonthLabel(now = new Date()) {
+  const w = new Date(now.getTime() + 7 * 3600 * 1000);
+  let idx = w.getUTCMonth() - 1;
+  if (idx < 0) idx = 11;
+  return BULAN_FULL[idx];
+}
+
+/** True jika unit adalah kantor cabang (KC / KCK / KCP / Syariah). */
+export function isUnitCabang(name, typeOrOpts = "", unitType = "") {
+  const opts =
+    typeOrOpts && typeof typeOrOpts === "object"
+      ? typeOrOpts
+      : { type: typeOrOpts, unitType };
+  const n = String(name || "").trim();
+  const ut = String(opts.unitType || unitType || "").toLowerCase();
+  const masterType = String(opts.type || "").toUpperCase();
+  return (
+    ut === "kc" ||
+    ut === "kck" ||
+    ut === "kcp" ||
+    masterType === "KONVENSIONAL" ||
+    masterType === "SYARIAH" ||
+    /^(KC|KCS|KCP|KCK|KCPS)\s/i.test(n) ||
+    /\bcabang\b|\bcapem\b/i.test(n)
+  );
+}
+
+/**
+ * Format nama Unit Kerja sesuai tipe:
+ * - Cabang (KC/KCK/KCP/Syariah) → KC / KCS / KCP / KCK / KCPS
+ * - Divisi / Departemen / UKK / Unit / Project / Direksi → nama asli
+ */
+export function formatUnitKerja(name, typeOrOpts = "", unitType = "") {
+  const opts =
+    typeOrOpts && typeof typeOrOpts === "object"
+      ? typeOrOpts
+      : { type: typeOrOpts, unitType };
+  let n = String(name || "").trim();
+  if (!n) return "";
+  n = n.replace(/\s+/g, " ");
+  if (!isUnitCabang(n, opts)) return n;
+
+  if (/^(KC|KCS|KCP|KCK|KCPS)\s/i.test(n)) return n;
+  const masterType = String(opts.type || "").toUpperCase();
+  const sy = /syariah/i.test(n) || masterType === "SYARIAH";
+  if (/koordinator|kordinato|utama/i.test(n)) {
+    n = n.replace(/^Cabang\s+/i, "").trim();
+    return `KC ${n}`;
+  }
+  if (/pembantu|capem/i.test(n)) {
+    n = n
+      .replace(/^Cabang Pembantu Syariah\s+/i, "")
+      .replace(/^Cabang Pembantu\s+/i, "")
+      .replace(/^Capem\s+/i, "")
+      .trim();
+    return `${sy ? "KCPS" : "KCP"} ${n}`;
+  }
+  n = n.replace(/^Cabang Syariah\s+/i, "").replace(/^Cabang\s+/i, "").trim();
+  return `${sy ? "KCS" : "KC"} ${n}`;
+}
+
+/** @deprecated gunakan formatUnitKerja */
+export function formatKantorCabang(name, type = "") {
+  return formatUnitKerja(name, { type });
+}
+
+function buildRankingSheet(XU, rankingRows, { periodeHead, nameCol, sheetName }) {
+  const XS_BLUE = {
+    font: { bold: true, color: { rgb: "FFFFFF" } },
+    fill: { patternType: "solid", fgColor: { rgb: "2F75B5" } },
+    alignment: { horizontal: "center", vertical: "center", wrapText: true },
+    border: XS_BORDER,
+  };
+  const aoa = [
+    ["No", "Kode", nameCol, periodeHead, ""],
+    ["", "", "", "Total Nilai", "Kategori Nilai"],
+    ...rankingRows.map((r, i) => [
+      i + 1,
+      r.kode != null && r.kode !== "" ? Number(r.kode) || r.kode : "",
+      r.kantor || r.unit || "",
+      r.skor != null && Number.isFinite(Number(r.skor)) ? round(Number(r.skor), 2) : null,
+      r.kategori || "-",
+    ]),
+  ];
+  const ws = XU.aoa_to_sheet(aoa);
+  ws["!merges"] = [
+    { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
+    { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
+    { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },
+    { s: { r: 0, c: 3 }, e: { r: 0, c: 4 } },
+  ];
+  ws["!cols"] = [{ wch: 6 }, { wch: 14 }, { wch: 36 }, { wch: 12 }, { wch: 16 }];
+  ws["!rows"] = [{ hpt: 22 }, { hpt: 20 }];
+  const lastRow = Math.max(rankingRows.length + 1, 1);
+  ws["!autofilter"] = { ref: `A2:E${lastRow + 1}` };
+  for (let c = 0; c < 5; c++) {
+    xsCell(XU, ws, 0, c, XS_BLUE);
+    xsCell(XU, ws, 1, c, XS_BLUE);
+  }
+  rankingRows.forEach((r, i) => {
+    const y = 2 + i;
+    for (let c = 0; c < 5; c++) {
+      const left = c === 2;
+      const cell = xsCell(XU, ws, y, c, {
+        alignment: { vertical: "center", horizontal: left ? "left" : "center" },
+      });
+      if (c === 3) cell.z = "0.00";
+      if (c === 4) cell.s.font = { ...(cell.s.font || {}), bold: true };
+    }
+  });
+  return { ws, sheetName };
+}
+
+/**
+ * Workbook ranking unit — 2 sheet:
+ * 1) Unit Kerja (Divisi / Departemen / UKK / Unit / dll.)
+ * 2) Kantor Cabang (KC / KCK / KCP)
+ */
+export function buildUnitRankingWorkbook(XU, rankingRows = [], opts = {}) {
+  const bulan = opts.monthLabel || nilaiPeriodeMonthLabel();
+  const periodeHead = `Nilai periode ${bulan}`;
+  const wb = XU.book_new();
+
+  const pusat = [];
+  const cabang = [];
+  for (const r of rankingRows) {
+    const name = r.unit || r.kantor || "";
+    const cab =
+      r.isCabang != null
+        ? !!r.isCabang
+        : isUnitCabang(name, { type: r.masterType || r.type || "", unitType: r.unitType || "" });
+    (cab ? cabang : pusat).push(r);
+  }
+
+  const s1 = buildRankingSheet(XU, pusat, {
+    periodeHead,
+    nameCol: "Unit Kerja",
+    sheetName: "Unit Kerja",
+  });
+  XU.book_append_sheet(wb, s1.ws, s1.sheetName);
+
+  const s2 = buildRankingSheet(XU, cabang, {
+    periodeHead,
+    nameCol: "Kantor Cabang",
+    sheetName: "Kantor Cabang",
+  });
+  XU.book_append_sheet(wb, s2.ws, s2.sheetName);
+
+  return wb;
 }

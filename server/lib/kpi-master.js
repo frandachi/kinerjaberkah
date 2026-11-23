@@ -19,6 +19,11 @@ const RESERVED_CODES = {
     name: 'Laba Bersih (Konsolidasi)',
     perspective: 'financial',
   },
+  'KPI-IBP-09': {
+    groupKey: 'o/s kredit kol.1 yang direalisasikan selama <1 tahun',
+    name: 'O/S Kredit Kol.1 yang direalisasikan selama <1 Tahun',
+    perspective: 'internal_process',
+  },
 };
 
 function parseJsonField(value, fallback = {}) {
@@ -55,7 +60,13 @@ function normalizePerspectiveKey(perspective) {
   const value = String(perspective || '').trim().toLowerCase();
   if (!value) return 'financial';
   if (value === 'financial' || value.includes('finansial')) return 'financial';
-  if (value === 'customer' || value.includes('customer') || value.includes('pelanggan')) return 'customer';
+  if (
+    value === 'customer'
+    || value.includes('customer')
+    || value.includes('cistom') // typo umum di Excel: CISTOMER
+    || value.includes('pelanggan')
+    || value.includes('nasabah')
+  ) return 'customer';
   if (
     value === 'internal_process'
     || value.includes('internal')
@@ -72,13 +83,133 @@ function normalizePerspectiveKey(perspective) {
   return value;
 }
 
+/** Alias ejaan / slash / typo → satu groupKey kanonik */
+const GROUP_KEY_ALIASES = {
+  'pembiayaan syariah (dblm)': 'pembiayaan syariah/dblm',
+  'dpk syariah (dblm)': 'dpk syariah/dblm',
+  'employee integrity indeks': 'employee integrity index',
+  'npl/npf gross': 'npl gross',
+  'npl / npf gross': 'npl gross',
+  'rasio npl/npf gross': 'npl gross',
+  'rasio npl / npf gross': 'npl gross',
+  'penyelesaiaan temuan audit external dan internal sesuai komitmen':
+    'penyelesaian temuan audit external dan internal sesuai komitmen',
+  'penyelesaian temuan audit eksternal dan internal sesuai komitmen':
+    'penyelesaian temuan audit external dan internal sesuai komitmen',
+  'penyelesaiaan temuan audit eksternal dan internal sesuai komitmen':
+    'penyelesaian temuan audit external dan internal sesuai komitmen',
+  'ertumbuhan o/s dana pihak ketiga': 'pertumbuhan o/s dpk',
+  'pertumbuhan o/s dana pihak ketiga': 'pertumbuhan o/s dpk',
+  'pertumbuhan o/s dpk': 'pertumbuhan o/s dpk',
+  'aset': 'total aset',
+  'biaya atk bbc, listrik, air, dan bbm, konsumsi dan pertemuan rapat':
+    'efisiensi biaya atk, bbc, listrik, air, bbm, konsumsi dan pertemuan rapat',
+  'pendapatan feebase income': 'fee based income',
+  'feebase income': 'fee based income',
+  'efektifitas layanan vendor tkad': 'efektivitas layanan vendor tkad',
+  'engagement rate kegiatan marketing product': 'engagement rate kegiatan marketing produk',
+  'liquidity overage ratio (lcr)': 'liquidity coverage ratio (lcr)',
+  'liquidity overage rasio (lcr)': 'liquidity coverage ratio (lcr)',
+  'index integritas pegawai': 'indeks integritas pegawai',
+  'index intregitas pegawai': 'indeks integritas pegawai',
+  'index kepuasan pelanggan': 'indeks kepuasan pelanggan',
+  'index kualitas layanan divisi ti': 'indeks kualitas layanan divisi ti',
+  'index kualitas layanan ukk - apuppt': 'indeks kualitas layanan ukk-apuppt',
+  'index kualitas layanan ukk-apuppt': 'indeks kualitas layanan ukk-apuppt',
+  'index kualitas layanan unit usaha syariah': 'indeks kualitas layanan unit usaha syariah',
+  'rasio npl/ npf gross konsolidasi': 'rasio npl/npf gross konsolidasi',
+  'rasio npl/npf gross konsolidasi': 'rasio npl/npf gross konsolidasi',
+  'rasio npl / npf gross konsol': 'rasio npl/npf gross konsolidasi',
+};
+
+/** Nama tampilan kanonik per groupKey */
+const CANONICAL_DISPLAY_NAMES = {
+  'laba bersih': 'Laba Bersih (Konsolidasi)',
+  'o/s kredit kol.1 yang direalisasikan selama <1 tahun':
+    'O/S Kredit Kol.1 yang direalisasikan selama <1 Tahun',
+  'pembiayaan syariah/dblm': 'Pembiayaan Syariah/DBLM',
+  'dpk syariah/dblm': 'DPK Syariah/DBLM',
+  'employee integrity index': 'Employee Integrity Index',
+  'npl gross': 'NPL Gross',
+  'penyelesaian temuan audit external dan internal sesuai komitmen':
+    'Penyelesaian Temuan Audit External dan Internal sesuai Komitmen',
+  'pertumbuhan o/s dpk': 'Pertumbuhan O/S DPK',
+  'total aset': 'Total Aset',
+  'efisiensi biaya atk, bbc, listrik, air, bbm, konsumsi dan pertemuan rapat':
+    'Efisiensi Biaya ATK, BBC, Listrik, Air, BBM, Konsumsi dan Pertemuan Rapat',
+  'fee based income': 'Fee Based Income',
+  'culture implementation index': 'Culture Implementation Index',
+  'efektivitas layanan vendor tkad': 'Efektivitas Layanan Vendor TKAD',
+  'engagement rate kegiatan marketing produk': 'Engagement Rate Kegiatan Marketing Produk',
+  'liquidity coverage ratio (lcr)': 'Liquidity Coverage Ratio (LCR)',
+  'indeks integritas pegawai': 'Indeks Integritas Pegawai',
+  'indeks kepuasan pelanggan': 'Indeks Kepuasan Pelanggan',
+  'rasio npl/npf gross konsolidasi': 'Rasio NPL/NPF Gross Konsolidasi',
+};
+
+function stripObjectiveCodePrefix(key) {
+  // "f2.1 asset …", "b6.1 realisasi…", "c1.1 index…", "l1.1. culture…"
+  return String(key || '').replace(/^[a-z]\d+(?:\.\d+)*\.?\s+/, '').trim();
+}
+
 /** Kunci grup: Laba Bersih* (non-pertumbuhan) digabung ke satu master */
 function groupKeyForName(name) {
-  const key = normalizeNameKey(name);
+  let key = normalizeNameKey(name);
   if (!key) return '';
+  if (key.startsWith('[deprecated]')) key = key.replace(/^\[deprecated\]\s*/, '');
+  key = stripObjectiveCodePrefix(key);
   if (key.includes('pertumbuhan') && key.includes('laba bersih')) return key;
   if (key === 'laba bersih' || key.startsWith('laba bersih')) return 'laba bersih';
+  // Samakan Col/Kol + spasi agar 1 konsep O/S Kredit <1 Tahun → KPI-IBP-09
+  // (kecuali varian Direview / Kelolaan / Legal Opini)
+  if (
+    (key.includes('o/s kredit') || key.includes('os kredit'))
+    && (key.includes('col') || key.includes('kol'))
+    && key.includes('direalisasikan')
+    && !key.includes('direview')
+    && !key.includes('kelolaan')
+    && !key.includes('legal opini')
+  ) {
+    const core = key
+      .replace(/\bcol\b/g, 'kol')
+      .replace(/kol\.\s*/g, 'kol.')
+      .replace(/<\s*1/g, '<1')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (/^o\/s kredit kol\.1 yang direalisasikan selama <1 tahun$/.test(core)) {
+      return RESERVED_CODES['KPI-IBP-09'].groupKey;
+    }
+  }
+  // Normalisasi ringan sebelum alias
+  key = key
+    .replace(/\bcol\b/g, 'kol')
+    .replace(/kol\.\s*/g, 'kol.')
+    .replace(/efektifitas/g, 'efektivitas')
+    .replace(/\bproduct\b/g, 'produk')
+    .replace(/\bindeks\b/g, 'index') // lalu alias index→indeks untuk frasa ID
+    .replace(/intregitas/g, 'integritas')
+    .replace(/<\s*1/g, '<1')
+    .replace(/\s+/g, ' ')
+    .trim();
+  // Kembalikan index→indeks untuk frasa Indonesia yang sudah di-alias
+  if (GROUP_KEY_ALIASES[key]) return GROUP_KEY_ALIASES[key];
+  // Coba lagi setelah index/indeks swap untuk frasa ID
+  const asIndeks = key.replace(/\bindex\b/g, 'indeks');
+  if (GROUP_KEY_ALIASES[asIndeks]) return GROUP_KEY_ALIASES[asIndeks];
+  if (GROUP_KEY_ALIASES[key.replace(/\bindeks\b/g, 'index')]) {
+    return GROUP_KEY_ALIASES[key.replace(/\bindeks\b/g, 'index')];
+  }
   return key;
+}
+
+function canonicalDisplayName(nameOrKey, opts = {}) {
+  const key = groupKeyForName(nameOrKey) || normalizeNameKey(nameOrKey);
+  if (key === 'laba bersih') {
+    return opts.forMaster ? RESERVED_CODES['KPI-FIN-01'].name : 'Laba Bersih';
+  }
+  if (CANONICAL_DISPLAY_NAMES[key]) return CANONICAL_DISPLAY_NAMES[key];
+  if (key === RESERVED_CODES['KPI-IBP-09'].groupKey) return RESERVED_CODES['KPI-IBP-09'].name;
+  return stripNameSymbols(nameOrKey);
 }
 
 function isLabaBersihChildName(name) {
@@ -212,6 +343,7 @@ async function resolveMasterCodeForName(dbOrName, maybeName) {
     const name = dbOrName;
     const key = groupKeyForName(name);
     if (key === 'laba bersih') return 'KPI-FIN-01';
+    if (key === RESERVED_CODES['KPI-IBP-09'].groupKey) return 'KPI-IBP-09';
     return null;
   }
   const db = dbOrName;
@@ -219,6 +351,7 @@ async function resolveMasterCodeForName(dbOrName, maybeName) {
   const key = groupKeyForName(name);
   if (!key) return null;
   if (key === 'laba bersih') return 'KPI-FIN-01';
+  if (key === RESERVED_CODES['KPI-IBP-09'].groupKey) return 'KPI-IBP-09';
 
   const { keyToCode } = await loadCatalogFromDb(db);
   return keyToCode[key] || null;
@@ -234,8 +367,10 @@ async function ensureMasterCodeForKpi(db, { name, perspective, unit, polarity } 
   if (!key) return null;
 
   let code = await resolveMasterCodeForName(db, name);
-  const persp = normalizePerspectiveKey(perspective);
-  const displayName = key === 'laba bersih' ? RESERVED_CODES['KPI-FIN-01'].name : stripNameSymbols(name);
+  const persp = key === RESERVED_CODES['KPI-IBP-09'].groupKey
+    ? 'internal_process'
+    : normalizePerspectiveKey(perspective);
+  const displayName = canonicalDisplayName(name, { forMaster: true });
 
   // Master yang sudah ada tidak boleh ditimpa satuan/polaritas dari KPI individu.
   if (code && (await getMasterUnit(db, code))) return code;
@@ -399,13 +534,11 @@ async function buildMasterPlanFromDb(db) {
 
   groups.forEach((g) => {
     const bucket = byPerspective[g.perspective] || byPerspective.financial;
-    // Prefer display name: reserved, or most frequent, or longest
-    let displayName = stripNameSymbols(
-      [...g.names.entries()].sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)[0][0]
-    );
-    if (g.groupKey === 'laba bersih') {
-      displayName = RESERVED_CODES['KPI-FIN-01'].name;
-    }
+    // Prefer display name kanonik, atau yang paling sering dipakai
+    const topName = [...g.names.entries()].sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)[0][0];
+    let displayName = canonicalDisplayName(topName, { forMaster: true });
+    if (CANONICAL_DISPLAY_NAMES[g.groupKey]) displayName = CANONICAL_DISPLAY_NAMES[g.groupKey];
+    if (g.groupKey === 'laba bersih') displayName = RESERVED_CODES['KPI-FIN-01'].name;
     bucket.push({
       groupKey: g.groupKey,
       name: displayName,
@@ -696,8 +829,11 @@ module.exports = {
   MONTHS,
   MASTER_KPI_CATALOG,
   RESERVED_CODES,
+  GROUP_KEY_ALIASES,
+  CANONICAL_DISPLAY_NAMES,
   isLabaBersihChildName,
   groupKeyForName,
+  canonicalDisplayName,
   normalizeNameKey,
   stripNameSymbols,
   normalizePerspectiveKey,

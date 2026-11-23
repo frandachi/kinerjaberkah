@@ -4,6 +4,10 @@ DirectoryIndex index.html index.php
   RewriteEngine On
   RewriteBase /kinerjaberkah/
 
+  # Blok akses langsung ke pohon Node (uploads/source). API tetap lewat /api → Passenger.
+  RewriteCond %{REQUEST_URI} ^/kinerjaberkah/server(/|$) [NC]
+  RewriteRule ^ - [F,L]
+
   RewriteCond %{REQUEST_URI} ^/kinerjaberkah/api [NC]
   RewriteRule ^ - [L]
 

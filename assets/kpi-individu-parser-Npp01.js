@@ -90,7 +90,7 @@ function perspectiveOf(v) {
   const p = low(v);
   if (!p || p === "*") return "";
   if (p.includes("finan") || p.includes("keuangan")) return "financial";
-  if (p.includes("custom") || p.includes("pelanggan") || p.includes("nasabah")) return "customer";
+  if (p.includes("custom") || p.includes("cistom") || p.includes("pelanggan") || p.includes("nasabah")) return "customer";
   if (p.includes("internal") || p.includes("proses") || p.includes("process") || p.includes("bisnis")) return "internal_process";
   if (p.includes("learning") || p.includes("growth") || p.includes("pembelajaran")) return "learning_growth";
   return "";
@@ -101,22 +101,39 @@ function unitOf(v) {
   if (!s) return "percentage";
   if (/%|persen|percent/.test(s)) return "percentage";
   if (/\brp\b|rupiah|juta|miliar|milyar/.test(s)) return "currency";
-  if (/indeks|index|skor|score|composit/.test(s)) return "score";
+  if (/indeks|index|skor|score|composit|survei|survey/.test(s)) return "score";
+  if (/peringkat/.test(s)) return "number";
   return "number";
 }
 
-function polarityOf(raw, name, ukuran) {
-  const p = low(raw);
+/** Kode polarisasi skor (Maximize/Minimize A|B|C) sesuai kolom template & master polaritas. */
+function polarityOf(raw, name, ukuran, perspective) {
+  const p = low(raw).replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
   if (p) {
-    if (p.includes("min")) return "minimize";
-    if (p.includes("fast") || p.includes("waktu")) return "faster";
-    if (p.includes("range")) return "range";
-    return "maximize";
+    if (/minimi[sz]e\s*c|stabilize|stabilisasi|stabil/.test(p)) return "minimize_c";
+    if (/minimi[sz]e\s*b/.test(p)) return "minimize_b";
+    if (/minimi[sz]e\s*a/.test(p) || /^minimi[sz]e$/.test(p) || p === "min") return "minimize_a";
+    if (/minimi[sz]e/.test(p)) return "minimize_a";
+    if (/faster|waktu|sla waktu/.test(p)) return "faster";
+    if (/range|rentang/.test(p)) return "range";
+    if (/maximi[sz]e\s*c/.test(p)) return "maximize_c";
+    if (/maximi[sz]e\s*b/.test(p)) return "maximize_b";
+    if (/maximi[sz]e\s*a/.test(p) || /^maximi[sz]e$/.test(p) || p === "max") return inferMaximizeScale(ukuran, perspective);
+    if (/maximi[sz]e/.test(p)) return inferMaximizeScale(ukuran, perspective);
   }
   const n = low(name);
-  if (/\bnpl\b|cost of (credit|fund)|\bbopo\b|\bdenda\b|\bckpn\b|\bloses\b|\bloss\b/.test(n)) return "minimize";
+  if (/\bnpl\b|\bnpf\b/.test(n)) return "minimize_c";
+  if (/cost of (credit|fund)|\bbopo\b|\bdenda\b|\bckpn\b|\bloses\b|\bloss\b|\btat\b/.test(n)) return "minimize_a";
   if (/\bhari\b/.test(low(ukuran))) return "faster";
-  return "maximize";
+  return inferMaximizeScale(ukuran, perspective);
+}
+
+function inferMaximizeScale(ukuran, perspective) {
+  const u = unitOf(ukuran);
+  const ps = perspectiveOf(perspective) || low(perspective);
+  if (ps === "learning_growth" || /learning|growth|pembelajaran/.test(low(perspective))) return "maximize_c";
+  if (u === "score") return "maximize_b";
+  return "maximize_a";
 }
 
 export function parseNumber(raw) {
@@ -140,18 +157,29 @@ export function parseNumber(raw) {
   return Number.isFinite(n) ? { n, pct: s.includes("%") } : null;
 }
 
-function valueFor(raw, unit) {
+function isNplGrossName(name) {
+  return /\bnpl\b/i.test(String(name || "")) && /gross/i.test(String(name || ""));
+}
+
+function valueFor(raw, unit, kpiName = "") {
   const p = parseNumber(raw);
   if (!p) return null;
   let n = p.n;
-  if (unit === "percentage" && !p.pct && Math.abs(n) <= 1) n *= 100;
+  if (unit === "percentage" && !p.pct) {
+    // NPL Gross: 0.37 = 0.37% (jangan ×100 jadi 37). Excel fraction murni ≤0.05 saja yang ×100.
+    if (isNplGrossName(kpiName)) {
+      if (Math.abs(n) > 0 && Math.abs(n) <= 0.05) n *= 100;
+    } else if (Math.abs(n) <= 1) {
+      n *= 100;
+    }
+  }
   return Math.round(n * 10000) / 10000;
 }
 
-function annualTarget(raw, unit) {
+function annualTarget(raw, unit, kpiName = "") {
   if (raw === "" || raw == null) return "";
   if (typeof raw === "number") {
-    const v = valueFor(raw, unit);
+    const v = valueFor(raw, unit, kpiName);
     return v == null ? "" : String(v);
   }
   return text(raw);
@@ -163,10 +191,24 @@ function parseSheet(ws, sheetName, utils, startKey) {
   const h = detectHeader(rows);
   if (h < 0) return { entries: [], skipped: "Header (INDIKATOR KINERJA UTAMA / BOBOT) tidak ditemukan" };
 
-  const header = rows[h] || [];
+  let header = rows[h] || [];
   const next = rows[h + 1] || [];
-  const hasSub = next.some((v) => /realisasi|target/i.test(text(v)));
-  const col = mapColumns(header, hasSub ? next : []);
+  const next2 = rows[h + 2] || [];
+  const isSub = (r) => r.some((v) => /realisasi|target/i.test(text(v)));
+  let sub = [];
+  let skip = 1;
+  if (isSub(next)) {
+    sub = next;
+    skip = 2;
+  } else if (next.some((v) => monthOf(v)) && isSub(next2)) {
+    // Header 3 baris: TW / bulan / Realisasi-Target
+    const width = Math.max(header.length, next.length, next2.length);
+    header = Array.from({ length: width }, (_, c) =>
+      /realisasi|target/i.test(text(next2[c])) ? (monthOf(next[c]) ? next[c] : "") : header[c]);
+    sub = next2;
+    skip = 3;
+  }
+  const col = mapColumns(header, sub);
   if (col.periode !== undefined) return { entries: [], skipped: "Format mutasi (kolom PERIODE) belum didukung di layar ini" };
   if (col.name === undefined) return { entries: [], skipped: "Kolom INDIKATOR KINERJA UTAMA tidak ditemukan" };
   if (col.nama === undefined && col.npp === undefined) return { entries: [], skipped: "Kolom NAMA / NPP tidak ditemukan" };
@@ -176,7 +218,7 @@ function parseSheet(ws, sheetName, utils, startKey) {
   let cur = null;
   let persp = "";
 
-  for (let i = h + (hasSub ? 2 : 1); i < rows.length; i++) {
+  for (let i = h + skip; i < rows.length; i++) {
     const row = rows[i] || [];
     if (row.every((v) => text(v) === "")) {
       cur = null;
@@ -225,13 +267,13 @@ function parseSheet(ws, sheetName, utils, startKey) {
       const fractional = weights.filter((w) => w > 0 && w <= 1).length;
       const fractionMode = fractional > 0 && fractional >= weights.filter((w) => w > 1).length;
       const scaleOf = (w) => (fractionMode && w <= 1 ? 100 : 1);
-      const kpis = e.raw.map((r, idx) => {
+      let kpis = e.raw.map((r, idx) => {
         const unit = unitOf(r.ukuran);
         const monthly_data = {};
         const monthly_target = {};
         for (const x of r.monthCells) {
-          const rv = valueFor(x.real, unit);
-          const tv = valueFor(x.target, unit);
+          const rv = valueFor(x.real, unit, r.name);
+          const tv = valueFor(x.target, unit, r.name);
           if (rv != null) monthly_data[x.m] = rv;
           if (tv != null) monthly_target[x.m] = tv;
         }
@@ -240,12 +282,29 @@ function parseSheet(ws, sheetName, utils, startKey) {
           perspective: r.perspective,
           unit,
           unit_label: text(r.ukuran),
-          polarity: polarityOf(r.polaritas, r.name, r.ukuran),
+          polarity: polarityOf(r.polaritas, r.name, r.ukuran, r.perspective),
           weight: Math.round(weights[idx] * scaleOf(weights[idx]) * 100) / 100,
-          target: annualTarget(r.target, unit),
+          target: annualTarget(r.target, unit, r.name),
           monthly_data,
           monthly_target,
         };
+      });
+      // Nama sama + target beda (Playstore vs Appstore) → bedakan agar tidak terhapus di scorecard
+      const nameCount = {};
+      kpis.forEach((k) => {
+        const n = text(k.name).toLowerCase();
+        nameCount[n] = (nameCount[n] || 0) + 1;
+      });
+      kpis = kpis.map((k) => {
+        const n = text(k.name).toLowerCase();
+        if ((nameCount[n] || 0) <= 1) return k;
+        const tgt = text(k.target);
+        const m = tgt.match(/\(([^)]+)\)/);
+        const tag = m ? m[1] : tgt.slice(0, 40);
+        if (!tag) return k;
+        const suffix = ` (${tag})`;
+        if (text(k.name).toLowerCase().endsWith(suffix.toLowerCase())) return k;
+        return { ...k, name: text(k.name) + suffix };
       });
       return {
         key: e.key,
@@ -282,13 +341,16 @@ export function buildKpiIndividuTemplate(utils) {
   const row3 = [...head];
   const row4 = ["", "", "", "", "(Key Performance Indicators)", "", "", ""];
   monthLabels.forEach((m) => { row3.push(m, ""); row4.push("Realisasi", "Target"); });
+  row3.push("polarisasi");
+  row4.push("");
   const blankMonths = () => monthLabels.flatMap(() => ["", ""]);
   const sample = [
-    ["Pemimpin Divisi Audit Internal", "Nama Pegawai", "1234.01011980.01012005", "Financial", "Potensi Kerugian yang Teridentifikasi dari Audit", "Juta Rupiah", 10, "2,5% Laba Tahun 2026", 7500, 2753, 7500, 5824.25, ...blankMonths().slice(4)],
-    ["", "", "", "", "Recovery Kerugian akibat Audit", "% (persentase)", 10, "25%", "0,09%", 0.25, "0,09%", 0.25, ...blankMonths().slice(4)],
-    ["", "", "", "Customer", "Perbaikan Indeks Penerapan Fungsi Audit Intern", "Indeks (skor)", 10, "≥ 90", 100, "≥ 90", 100, "≥ 90", ...blankMonths().slice(4)],
-    ["", "", "", "Internal Bisnis Proses", "Penyelesaian Tindak Lanjut Sesuai Komitmen", "% (persentase)", 10, 1, "11,25%", 1, "19,63%", 1, ...blankMonths().slice(4)],
-    ["", "", "", "Learning & Growth", "Culture Implementation Index", "Indeks (skor)", 5, 4, ...blankMonths()],
+    ["Pemimpin Divisi Audit Internal", "Nama Pegawai", "1234.01011980.01012005", "Financial", "Potensi Kerugian yang Teridentifikasi dari Audit", "Juta Rupiah", 10, "2,5% Laba Tahun 2026", 7500, 2753, 7500, 5824.25, ...blankMonths().slice(4), "Maximize A"],
+    ["", "", "", "", "Recovery Kerugian akibat Audit", "% (persentase)", 10, "25%", "0,09%", 0.25, "0,09%", 0.25, ...blankMonths().slice(4), "Maximize A"],
+    ["", "", "", "Customer", "Perbaikan Indeks Penerapan Fungsi Audit Intern", "Indeks (skor)", 10, "≥ 90", 100, "≥ 90", 100, "≥ 90", ...blankMonths().slice(4), "Maximize C"],
+    ["", "", "", "Internal Bisnis Proses", "Penyelesaian Tindak Lanjut Sesuai Komitmen", "% (persentase)", 10, 1, "11,25%", 1, "19,63%", 1, ...blankMonths().slice(4), "Maximize B"],
+    ["", "", "", "", "Rasio NPL Gross", "% (persentase)", 5, 2, ...blankMonths(), "Minimize C"],
+    ["", "", "", "Learning & Growth", "Culture Implementation Index", "Indeks (skor)", 5, 4, ...blankMonths(), "Maximize C"],
   ];
   const notes = [
     [],
@@ -299,6 +361,7 @@ export function buildKpiIndividuTemplate(utils) {
     ["", "", "", "Kolom Target Tahunan", "Target selama setahun (angka atau teks, mis. ≥ 90%)."],
     ["", "", "", "Kolom Target", "Target pada masing-masing bulan."],
     ["", "", "", "Kolom Realisasi", "Realisasi pada masing-masing bulan (kosongkan bulan yang belum berjalan)."],
+    ["", "", "", "Kolom polarisasi", "Maximize A | Maximize B | Maximize C | Minimize A | Minimize B | Minimize C | Faster is better — menentukan skala skor 1–5."],
     ["", "", "", "Upload ulang", "KPI individu lama pada unit + jabatan pegawai yang sama akan diganti."],
   ];
   const aoa = [["Template Pengisian KPI Individu Tahun " + new Date().getFullYear()], [], row3, row4, ...sample, ...notes];
@@ -306,10 +369,11 @@ export function buildKpiIndividuTemplate(utils) {
   const merges = [];
   for (let c = 0; c < head.length; c++) if (c !== 4) merges.push({ s: { r: 2, c }, e: { r: 3, c } });
   monthLabels.forEach((_, i) => merges.push({ s: { r: 2, c: 8 + i * 2 }, e: { r: 2, c: 9 + i * 2 } }));
-  for (const c of [0, 1, 2]) merges.push({ s: { r: 4, c }, e: { r: 8, c } });
+  merges.push({ s: { r: 2, c: 8 + monthLabels.length * 2 }, e: { r: 3, c: 8 + monthLabels.length * 2 } });
+  for (const c of [0, 1, 2]) merges.push({ s: { r: 4, c }, e: { r: 9, c } });
   merges.push({ s: { r: 4, c: 3 }, e: { r: 5, c: 3 } });
   ws["!merges"] = merges;
-  ws["!cols"] = [{ wch: 30 }, { wch: 22 }, { wch: 24 }, { wch: 20 }, { wch: 48 }, { wch: 16 }, { wch: 8 }, { wch: 22 }, ...monthLabels.flatMap(() => [{ wch: 10 }, { wch: 10 }])];
+  ws["!cols"] = [{ wch: 30 }, { wch: 22 }, { wch: 24 }, { wch: 20 }, { wch: 48 }, { wch: 16 }, { wch: 8 }, { wch: 22 }, ...monthLabels.flatMap(() => [{ wch: 10 }, { wch: 10 }]), { wch: 14 }];
   const wb = utils.book_new();
   utils.book_append_sheet(wb, ws, "KPI Individu");
   return wb;

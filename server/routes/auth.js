@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 const db = require('../db');
 const authenticateToken = require('../middleware/auth');
 const { loginLimiter, captchaLimiter } = require('../middleware/rate-limiter');
-const { auditMiddleware } = require('../middleware/audit');
+const { auditMiddleware, logActivity } = require('../middleware/audit');
 const { verifyTOTP, isTotpEnabled, sanitizeUser, generateSecret, otpauthURL, qrDataUrl } = require('../lib/totp');
 const { createCaptcha, consumeCaptcha } = require('../lib/captcha');
 const { authLogin } = require('../lib/hris-gateway');
@@ -44,7 +44,7 @@ function isLockExemptUser(userOrLogin) {
   return candidates.some((v) => LOCK_EXEMPT_LOGINS.has(v));
 }
 
-async function issueSession(res, user) {
+async function issueSession(res, user, req) {
   try {
     await db.query(
       'UPDATE users SET failed_attempts = 0, locked_until = NULL, last_login = NOW() WHERE id = ?',
@@ -57,8 +57,17 @@ async function issueSession(res, user) {
   const token = jwt.sign(
     { id: user.id, username: user.username, role: user.role, jabatan: user.jabatan, unit_name: user.unit_name },
     process.env.JWT_SECRET,
-    { expiresIn: '2h' }
+    { expiresIn: '8h' }
   );
+
+  try {
+    await logActivity(
+      user,
+      'LOGIN',
+      { message: 'Login berhasil', username: user.username, unit_name: user.unit_name, jabatan: user.jabatan },
+      (req && (req.ip || req.headers['x-forwarded-for'])) || 'unknown'
+    );
+  } catch (_) { /* audit gagal tidak boleh menggagalkan login */ }
 
   res.json({ user: sanitizeUser(user), token });
 }
@@ -198,11 +207,15 @@ router.post('/login', loginLimiter, async (req, res) => {
       });
     }
 
+    if (String(user.status || '').toLowerCase() === 'nonaktif') {
+      return res.status(403).json({ message: 'Akun nonaktif. Hubungi administrator.' });
+    }
+
     // MFA sementara dimatikan (set MFA_ENABLED=true di .env untuk mengaktifkan lagi)
     if (String(process.env.MFA_ENABLED || '').toLowerCase() === 'true') {
       return respondMfaGate(res, user);
     }
-    return issueSession(res, user);
+    return issueSession(res, user, req);
   } catch (error) {
     console.error('Login error:', error.message);
     res.status(500).json({ message: 'Terjadi kesalahan pada server' });
@@ -239,7 +252,7 @@ router.post('/login/2fa', loginLimiter, async (req, res) => {
       return res.status(401).json({ message: 'Kode MFA tidak valid' });
     }
 
-    return issueSession(res, user);
+    return issueSession(res, user, req);
   } catch (error) {
     console.error('Login 2FA error:', error.message);
     res.status(500).json({ message: 'Terjadi kesalahan pada server' });
@@ -305,7 +318,7 @@ router.post('/login/mfa-activate', loginLimiter, async (req, res) => {
       await db.query('UPDATE users SET totp_enabled = TRUE WHERE id = ?', [user.id]);
     }
     user.totp_enabled = true;
-    return issueSession(res, user);
+    return issueSession(res, user, req);
   } catch (error) {
     if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError' || error.status === 401) {
       return res.status(401).json({ message: 'Sesi MFA berakhir. Silakan login ulang.' });
