@@ -1,5 +1,4 @@
 const express = require('express');
-const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../db');
@@ -20,11 +19,10 @@ const isBcryptHash = (hash) => {
 };
 
 const verifyPassword = async (password, hash) => {
-  if (isBcryptHash(hash)) {
-    return bcrypt.compare(password, hash);
+  if (!isBcryptHash(hash)) {
+    return false;
   }
-  const md5Hash = crypto.createHash('md5').update(password).digest('hex');
-  return md5Hash === hash;
+  return bcrypt.compare(password, hash);
 };
 
 const hashPassword = async (password) => {

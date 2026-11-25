@@ -66,6 +66,9 @@ function decodeEvidence(body) {
   if (buf.length > EVIDENCE_MAX_BYTES) {
     throw Object.assign(new Error('Ukuran bukti maksimal 1 MB'), { status: 400 });
   }
+  if (buf.subarray(0, 5).toString('ascii') !== '%PDF-') {
+    throw Object.assign(new Error('Isi file bukan PDF yang valid'), { status: 400 });
+  }
   const mimeType = String(body.mimeType || 'application/octet-stream').toLowerCase();
   if (!ALLOWED_MIME.has(mimeType)) {
     throw Object.assign(new Error('Format bukti hanya PDF'), { status: 400 });

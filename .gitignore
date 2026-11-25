@@ -3,3 +3,14 @@
 ._*
 .DS_Store
 node_modules
+
+# Environment secrets and runtime state
+.env
+.env.*
+!.env.example
+server/.env
+server/.env.*
+!server/.env.example
+server/license.json
+server/logs/
+server/uploads/

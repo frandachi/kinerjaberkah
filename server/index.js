@@ -39,6 +39,11 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'fallback_secret_key_c
   process.exit(1);
 }
 
+if (!process.env.DB_PASS && !process.env.DB_PASSWORD && process.env.NODE_ENV === 'production') {
+  console.error('FATAL: Database password must be set in environment variables');
+  process.exit(1);
+}
+
 // if (!process.env.DB_PASS || process.env.DB_PASS === '') {
 //   console.error('FATAL: DB_PASS must be set in environment variables');
 //   process.exit(1);

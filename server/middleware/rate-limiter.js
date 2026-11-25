@@ -7,9 +7,15 @@ function envInt(name, fallback) {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-// Login: no IP throttle — many users share one office NAT and hit this immediately.
-// Account lockout after failed passwords (auth.js) still applies per-user.
-const loginLimiter = (req, res, next) => next();
+// Login: protect shared office NAT while allowing normal load.
+const loginLimiter = rateLimit({
+  windowMs: envInt('LOGIN_RATE_WINDOW_MS', 15 * 60 * 1000),
+  max: envInt('LOGIN_RATE_MAX', 30),
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false,
+  message: { message: 'Terlalu banyak percobaan login. Silakan coba lagi nanti.' },
+});
 
 // Default production: 600 / 5 menit / IP (kantor sering 1 IP NAT bersama).
 // Staging load-test: set API_RATE_MAX tinggi (mis. 100000) selama jendela uji.
