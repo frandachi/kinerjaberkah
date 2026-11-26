@@ -87,12 +87,18 @@ function convertValue(raw, unit, kpiName = '') {
   return n;
 }
 
-function inferPolarity(name) {
+function inferPolarity(name, target) {
   const n = String(name || '').toLowerCase();
+  // KPI denda / kerugian regulator (target 0) → Minimize D (Aktual − Target, skor 4 = 0).
+  const isRegulatorSanction =
+    /denda|kerugian/.test(n) &&
+    /regulator|ojk|\bojk\b|\bbi\b|dps|fraud|kepatuhan|pelanggaran|operasional|syariah|laporan/.test(n);
+  if (isRegulatorSanction && (target === undefined || Number(target) === 0)) {
+    return 'minimize_d';
+  }
   if (
     n.includes('npl') ||
     n.includes('bopo') ||
-    n.includes('denda') ||
     n.includes('biaya') ||
     n.includes('efisiensi biaya') ||
     n.includes('incident') ||
@@ -100,6 +106,8 @@ function inferPolarity(name) {
   ) {
     return 'minimize';
   }
+  // Denda tanpa konteks regulator tetap Minimize biasa.
+  if (n.includes('denda') || n.includes('kerugian')) return 'minimize';
   return 'maximize';
 }
 
@@ -223,7 +231,7 @@ function parseSheet(ws, sheetLabel) {
       weight,
       target: yearlyTarget,
       actual,
-      polarity: inferPolarity(kpiName),
+      polarity: inferPolarity(kpiName, yearlyTarget),
       monthly_data,
       monthly_target,
       jabatan,

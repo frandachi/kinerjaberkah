@@ -19,6 +19,7 @@ const rows=[
   {nama:"Minimize A",skor:["< 60%","≥ 60% s.d. < 100%","≥ 100% s.d. < 110%","≥ 110% s.d. ≤ 120%","> 120%"],formula:"Target / Aktual × 100%",contoh:"Cost of fund, biaya ATK, air, listrik, BBM, konsumsi, rapat"},
   {nama:"Minimize B",skor:["< 40%","≥ 40% s.d. < 60%","≥ 60% s.d. < 80%","≥ 80% s.d. ≤ 100%","> 100%"],formula:"Target / Aktual × 100%",contoh:"Peringkat TKS, GCG. Target 2"},
   {nama:"Minimize C",skor:["> 1%","> 0,25% s.d. ≤ 1%","> 0% s.d. ≤ 0,25%","= 0%","< 0%"],formula:"Aktual − Target",contoh:"Rasio NPL Gross"},
+  {nama:"Minimize D",skor:["> 50","> 10 s.d. ≤ 50","> 0 s.d. ≤ 10","= 0","-"],formula:"Aktual − Target",contoh:"KPI Denda / Kerugian Regulator (Target 0)"},
   {nama:"Faster is better",skor:["< 80%","≥ 80% s.d. < 100%","≥ 100% s.d. < 110%","≥ 110% s.d. ≤ 120%","> 120%"],formula:"Target waktu / Aktual waktu × 100%",contoh:"SLA. Berlaku tahun 2027"},
 ];
 const nilai=[

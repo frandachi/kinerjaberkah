@@ -6,6 +6,7 @@ const f = [
   { value: 'minimize_a', label: 'Minimize A', shortLabel: 'Minimize A', formula: 'Pencapaian = (Target ÷ Realisasi) × 100%' },
   { value: 'minimize_b', label: 'Minimize B', shortLabel: 'Minimize B', formula: 'Pencapaian = (Target ÷ Realisasi) × 100%' },
   { value: 'minimize_c', label: 'Minimize C', shortLabel: 'Minimize C', formula: 'Pencapaian = ROUND(Realisasi − Target, 2) %' },
+  { value: 'minimize_d', label: 'Minimize D', shortLabel: 'Minimize D', formula: 'Pencapaian = ROUND(Realisasi − Target, 2) — khusus KPI Denda/Kerugian Regulator, Target 0 (skor 4 = 0, skor 3 ≤ 10, skor 2 ≤ 50)' },
   { value: 'minimize', label: 'Minimize (Less is better)', shortLabel: 'Minimize', formula: 'Pencapaian = (Target ÷ Realisasi) × 100%' },
   { value: 'faster', label: 'Faster (Time-based)', shortLabel: 'Faster', formula: 'Pencapaian = (Target waktu ÷ Realisasi waktu) × 100%' },
   { value: 'range', label: 'Range (90%–110% = 100%)', shortLabel: 'Range', formula: 'BB ≤ Realisasi ≤ BA → 100%; di luar range proporsional' },
@@ -28,6 +29,7 @@ const kbPolBase = {
   minimize_a: { rumus: 'minimize', skala: 'A', batas: kbMinA },
   minimize_b: { rumus: 'minimize', skala: 'B', batas: kbMinB },
   minimize_c: { rumus: 'stabilize', skala: 'C', batas: kbMinC },
+  minimize_d: { rumus: 'stabilize', skala: 'C', batas: [10, 50, 999, 999] },
   faster: { rumus: 'faster', skala: 'B', batas: kbBatasPreset.B },
   range: { rumus: 'range', skala: 'A', batas: kbBatasPreset.A },
   stabilize: { rumus: 'stabilize', skala: 'C', batas: kbMinC },
@@ -83,8 +85,8 @@ function kbStabIndeks(diff, batas) {
 function kbIndeks(p, polarity, unit, ps) {
   kbLoadPol();
   const raw = String(polarity || '').trim().toLowerCase();
-  if (raw === 'minimize_c' || raw === 'stabilize' || (kbPol[raw] && kbPol[raw].rumus === 'stabilize')) {
-    return kbStabIndeks(p, (kbPol[raw] && kbPol[raw].batas) || kbMinC);
+  if (raw === 'minimize_c' || raw === 'minimize_d' || raw === 'stabilize' || (kbPol[raw] && kbPol[raw].rumus === 'stabilize')) {
+    return kbStabIndeks(p, (kbPol[raw] && kbPol[raw].batas) || (raw === 'minimize_d' ? [10, 50, 999, 999] : kbMinC));
   }
   if (raw === 'minimize') return kbIndeksFrom(p, String(unit || '') === 'score' ? kbMinB : kbMinA);
   if (kbPol[raw] && kbPol[raw].batas && kbPol[raw].rumus !== 'stabilize') return kbIndeksFrom(p, kbPol[raw].batas);

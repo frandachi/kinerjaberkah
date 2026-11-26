@@ -241,9 +241,13 @@ function bandsForKpi(polarity, unitType, perspective) {
   return polarityBatas(kode) || DEFAULT_BATAS[scale] || DEFAULT_BATAS.A;
 }
 
-function stabilizeCuts() {
-  const batas = polarityBatas('minimize_c') || polarityBatas('stabilize');
-  if (batas && batas[0] > 0 && batas[0] < batas[1] && batas[0] < 20) return { mid: batas[0], high: batas[1] };
+function stabilizeCuts(polarity) {
+  const raw = String(polarity || '').trim().toLowerCase();
+  const batas =
+    (raw === 'minimize_d' ? polarityBatas('minimize_d') : null) ||
+    polarityBatas('minimize_c') ||
+    polarityBatas('stabilize');
+  if (batas && batas[0] > 0 && batas[0] < batas[1]) return { mid: batas[0], high: batas[1] };
   return { mid: 0.25, high: 1 };
 }
 
@@ -256,6 +260,8 @@ function normalizeStabilizePair(actual, target, kpi) {
   let a = parseFloat(actual);
   let t = parseFloat(target);
   if (!Number.isFinite(a) || !Number.isFinite(t)) return { a, t };
+  // Minimize D (Target 0): nilai mentah — jangan ÷100.
+  if (String(kpi && kpi.polarity || '').trim().toLowerCase() === 'minimize_d') return { a, t };
   const name = String(kpi && kpi.name || '');
   const unit = normalizeUnit(kpi && kpi.unit);
   const isNpl = /\bnpl\b|\bnpf\b/i.test(name);
@@ -303,6 +309,8 @@ function normalizeStabilizeActual(actual, target, kpi) {
 function detectStabilizeSeriesScale(monthPairs, kpi) {
   const name = String(kpi && kpi.name || '');
   const unit = normalizeUnit(kpi && kpi.unit);
+  // Minimize D (Target 0): nilai mentah — tanpa koreksi skala deret.
+  if (String(kpi && kpi.polarity || '').trim().toLowerCase() === 'minimize_d') return { divHighActual: false, divTarget: false };
   const isNpl = /\bnpl\b|\bnpf\b/i.test(name);
   if (!isNpl && unit !== 'percentage') return { divHighActual: false, divTarget: false };
   const pairs = (monthPairs || []).filter(
@@ -328,11 +336,11 @@ function applySeriesScale(actual, target, seriesFix) {
   return { a, t };
 }
 
-function stabilizeIndeks(actual, target) {
+function stabilizeIndeks(actual, target, polarity) {
   const a = parseFloat(actual);
   const t = parseFloat(target);
   const x = a - t;
-  let { mid, high } = stabilizeCuts();
+  let { mid, high } = stabilizeCuts(polarity);
   // Minimize C (Excel Skor sheet): Aktual − Target
   // 5: <0% | 4: =0% | 3: >0–≤0,25% | 2: >0,25–≤1% | 1: >1%
   if (!Number.isFinite(x)) return 0;
@@ -347,6 +355,8 @@ function polarityForScore(kpi) {
   const raw = String(kpi && kpi.polarity || '').trim().toLowerCase();
   const name = String(kpi && kpi.name || '');
   const code = String(kpi && (kpi.kpi_code || kpi.parent_kpi_id || kpi.id) || '').trim().toUpperCase();
+  // Minimize D eksplisit selalu menang (KPI Target 0).
+  if (raw === 'minimize_d') return 'minimize_d';
   // Lock polarisasi Master KPI (selalu, abaikan nilai salah di instance)
   if (code === 'KPI-CUS-42' || code === 'KPI-CUS-04' || /pembiayaan\s*syariah/i.test(name) && /dblm/i.test(name)) {
     return 'maximize_a';
@@ -361,6 +371,12 @@ function polarityForScore(kpi) {
   }
   // NPL/NPF Gross selalu Minimize C (selisih absolut), jangan ikut minimize_a
   if (/\bnpl\b|\bnpf\b/i.test(name) && /gross/i.test(name)) return 'minimize_c';
+  // KPI Denda / Kerugian Regulator (target 0) — Minimize D (Aktual − Target).
+  const targetNum = parseFloat(String((kpi && kpi.target) ?? '').replace(',', '.'));
+  const isRegulatorSanction =
+    /denda|kerugian/i.test(name) &&
+    /regulator|ojk|\bbi\b|dps|fraud|kepatuhan|pelanggaran|operasional|syariah|laporan/i.test(name);
+  if (isRegulatorSanction && targetNum === 0) return 'minimize_d';
   if ((raw === '' || raw === 'maximize') && /temuan/i.test(name)) return 'maximize_b';
   if ((raw === '' || raw === 'minimize') && /\bnpl\b|\bnpf\b/i.test(name)) return 'minimize_c';
   if ((raw === '' || raw === 'minimize') && /cost\s*of\s*fund/i.test(name)) return 'minimize_a';
@@ -373,9 +389,9 @@ function polarityForScore(kpi) {
   return kpi && kpi.polarity;
 }
 
-function stabilizeIndeksFromDiff(diff, sampleMag) {
+function stabilizeIndeksFromDiff(diff, sampleMag, polarity) {
   const x = parseFloat(diff);
-  let { mid, high } = stabilizeCuts();
+  let { mid, high } = stabilizeCuts(polarity);
   if (!Number.isFinite(x)) return 0;
   if (x < -1e-9) return 5;
   if (Math.abs(x) <= 1e-9) return 4;
@@ -454,7 +470,7 @@ function averageMonthlyScores(kpi, monthlyData, monthlyTarget) {
       const scaled = applySeriesScale(actual, target, seriesFix);
       const pair = normalizeStabilizePair(scaled.a, scaled.t, scoredKpi);
       pencapaian = computePencapaianByPolarity(pair.a, pair.t, 'stabilize');
-      indeks = stabilizeIndeks(pair.a, pair.t);
+      indeks = stabilizeIndeks(pair.a, pair.t, scoredKpi.polarity);
     } else {
       pencapaian = computePencapaianForMonth(actual, target, scoredKpi, polarity);
       indeks = computeIndeksFromPencapaian(pencapaian, polarity, unitType, kpi.perspective);
@@ -483,7 +499,8 @@ function averageMonthlyScores(kpi, monthlyData, monthlyTarget) {
 
 function usesStabilize(kpi) {
   const raw = String(kpi && kpi.polarity || '').trim().toLowerCase();
-  if (raw === 'stabilize' || raw === 'minimize_c' || normalizePolarity(kpi && kpi.polarity) === 'stabilize') return true;
+  if (raw === 'stabilize' || raw === 'minimize_c' || raw === 'minimize_d') return true;
+  if (normalizePolarity(kpi && kpi.polarity) === 'stabilize') return true;
   return /npl/i.test(String(kpi && kpi.name || '')) && (raw === '' || raw === 'maximize' || raw === 'minimize');
 }
 

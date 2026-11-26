@@ -316,6 +316,7 @@ const POLARITAS_SEED = [
   ['pol_minimize_a', 'minimize_a', 'Minimize A', 'minimize', 'A', 'Cost of fund, Biaya ATK BBC, air, listrik, BBM, konsumsi dan pertemuan rapat.', 4, 60, 100, 110, 120],
   ['pol_minimize_b', 'minimize_b', 'Minimize B', 'minimize', 'B', 'KPI Peringkat TKS, GCG dll. Target 2.', 5, 40, 60, 80, 100],
   ['pol_minimize_c', 'minimize_c', 'Minimize C', 'stabilize', 'C', 'KPI Rasio NPL Gross.', 6, 0.25, 1, 2, 3],
+  ['pol_minimize_d', 'minimize_d', 'Minimize D', 'stabilize', 'C', 'Khusus KPI Denda / Kerugian Regulator (Target 0) — Aktual dikurangi Target. Skor 4 = 0, skor 3 ≤ 10, skor 2 ≤ 50.', 8, 10, 50, 999, 999],
   ['pol_faster', 'faster', 'Faster is better', 'faster', 'B', 'KPI Tindaklanjut temuan (kedepan), SLA. Berlaku untuk tahun 2027.', 7, 80, 100, 110, 120],
 ];
 const POL_BATAS_DEFAULT = { A: [60, 100, 105, 110], B: [80, 100, 110, 120], C: [60, 100, 120, 140] };
@@ -361,13 +362,21 @@ function ensurePolaritas() {
           [...batas, skala]
         );
       }
-      await db.query("UPDATE polaritas SET batas2 = 0.25, batas3 = 1, batas4 = 2, batas5 = 3 WHERE rumus = 'stabilize' AND batas2 >= 10");
+      await db.query("UPDATE polaritas SET batas2 = 0.25, batas3 = 1, batas4 = 2, batas5 = 3 WHERE rumus = 'stabilize' AND batas2 >= 10 AND kode <> 'minimize_d'");
       const [haveStab] = await db.query("SELECT id FROM polaritas WHERE kode IN ('minimize_c', 'stabilize')");
       if (!haveStab.length) {
         await db.query(
           `INSERT INTO polaritas (id, kode, nama, rumus, skala, keterangan, urutan, batas2, batas3, batas4, batas5)
            VALUES ('pol_minimize_c', 'minimize_c', 'Minimize C', 'stabilize', 'C', ?, 6, 0.25, 1, 2, 3)`,
           ['KPI Rasio NPL Gross.']
+        );
+      }
+      const [haveMinD] = await db.query("SELECT id FROM polaritas WHERE kode = 'minimize_d'");
+      if (!haveMinD.length) {
+        await db.query(
+          `INSERT INTO polaritas (id, kode, nama, rumus, skala, keterangan, urutan, batas2, batas3, batas4, batas5)
+           VALUES ('pol_minimize_d', 'minimize_d', 'Minimize D', 'stabilize', 'C', ?, 8, 10, 50, 999, 999)`,
+          ['Khusus KPI Denda / Kerugian Regulator (Target 0) — Aktual dikurangi Target. Skor 4 = 0, skor 3 ≤ 10, skor 2 ≤ 50.']
         );
       }
       const [rows] = await db.query('SELECT kode, rumus, skala, batas2, batas3, batas4, batas5 FROM polaritas');

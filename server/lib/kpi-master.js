@@ -120,6 +120,18 @@ const GROUP_KEY_ALIASES = {
   'rasio npl/ npf gross konsolidasi': 'rasio npl/npf gross konsolidasi',
   'rasio npl/npf gross konsolidasi': 'rasio npl/npf gross konsolidasi',
   'rasio npl / npf gross konsol': 'rasio npl/npf gross konsolidasi',
+  // Varian ejaan standar/standard & singkatan CSI (1 konsep = 1 master)
+  'indeks standard layanan frontliner': 'indeks standart layanan frontliner',
+  'index standart layanan frontliner': 'indeks standart layanan frontliner',
+  'indeks kepuasan nasabah csi': 'indeks kepuasan nasabah (csi)',
+  'index kepuasan nasabah (csi)': 'indeks kepuasan nasabah (csi)',
+  'index kepuasan nasabah csi': 'indeks kepuasan nasabah (csi)',
+  'indeks kepuasan nasabah': 'indeks kepuasan nasabah (csi)',
+  'index kepuasan nasabah': 'indeks kepuasan nasabah (csi)',
+  'index kepuasan nasabah kas mobil': 'indeks kepuasan nasabah kas mobil',
+  'indeks kepuasan nasabah kas mobil': 'indeks kepuasan nasabah kas mobil',
+  'indeks standard layanan teller': 'indeks standart layanan teller',
+  'index standart layanan teller': 'indeks standart layanan teller',
 };
 
 /** Nama tampilan kanonik per groupKey */
@@ -145,6 +157,10 @@ const CANONICAL_DISPLAY_NAMES = {
   'indeks integritas pegawai': 'Indeks Integritas Pegawai',
   'indeks kepuasan pelanggan': 'Indeks Kepuasan Pelanggan',
   'rasio npl/npf gross konsolidasi': 'Rasio NPL/NPF Gross Konsolidasi',
+  'indeks standart layanan frontliner': 'Indeks Standart Layanan Frontliner',
+  'indeks kepuasan nasabah (csi)': 'Indeks Kepuasan Nasabah (CSI)',
+  'indeks kepuasan nasabah kas mobil': 'Indeks Kepuasan Nasabah Kas Mobil',
+  'indeks standart layanan teller': 'Indeks Standart Layanan Teller',
 };
 
 function stripObjectiveCodePrefix(key) {
@@ -186,9 +202,10 @@ function groupKeyForName(name) {
     .replace(/kol\.\s*/g, 'kol.')
     .replace(/efektifitas/g, 'efektivitas')
     .replace(/\bproduct\b/g, 'produk')
+    .replace(/\bstandard\b/g, 'standart') // varian ejaan umum Excel
     .replace(/\bindeks\b/g, 'index') // lalu alias index→indeks untuk frasa ID
     .replace(/intregitas/g, 'integritas')
-    .replace(/<\s*1/g, '<1')
+  .replace(/<\s*1/g, '<1')
     .replace(/\s+/g, ' ')
     .trim();
   // Kembalikan index→indeks untuk frasa Indonesia yang sudah di-alias
@@ -314,9 +331,12 @@ async function loadCatalogFromDb(db) {
     const matchNames = parseJsonField(row.match_names, []);
     const matchKeys = parseJsonField(row.match_keys, []);
     const names = Array.isArray(matchNames) ? matchNames : [];
-    const keys = Array.isArray(matchKeys) && matchKeys.length
+    let keys = Array.isArray(matchKeys) && matchKeys.length
       ? matchKeys
       : names.map((n) => groupKeyForName(n)).filter(Boolean);
+    // Normalisasi match_keys lama (ejaan standard/index dsb.) ke kunci kanonik sekarang,
+    // agar master lama yang dibuat dengan kunci lama tetap dikenali sebagai konsep yang sama.
+    keys = keys.map((k) => groupKeyForName(k) || k);
 
     byCode[row.code] = {
       code: row.code,
@@ -433,8 +453,8 @@ async function ensureMasterParentRow(db, meta) {
         JSON.stringify({}),
         'master',
         'Approved',
-        meta.description || `Master ${code}`,
-        meta.objective || `Konsolidasi ${meta.name}`,
+        String(meta.description || `Master ${code}`).slice(0, 240),
+        String(meta.objective || `Konsolidasi ${meta.name}`).slice(0, 250),
       ]
     );
   } else {
@@ -450,8 +470,8 @@ async function ensureMasterParentRow(db, meta) {
         meta.perspective,
         meta.unit || 'currency',
         meta.polarity || 'maximize',
-        meta.description || `Master ${code}`,
-        meta.objective || `Konsolidasi ${meta.name}`,
+        String(meta.description || `Master ${code}`).slice(0, 240),
+        String(meta.objective || `Konsolidasi ${meta.name}`).slice(0, 250),
         code,
       ]
     );
@@ -475,7 +495,7 @@ async function ensureMasterParentRow(db, meta) {
       meta.perspective,
       meta.unit || 'currency',
       meta.polarity || 'maximize',
-      meta.description || `Master ${code}`,
+      String(meta.description || `Master ${code}`).slice(0, 240),
       JSON.stringify(meta.matchNames || []),
       JSON.stringify(meta.matchKeys || []),
       code,
@@ -501,6 +521,9 @@ async function buildMasterPlanFromDb(db) {
     GROUP BY name
   `);
 
+  // Katalog master lama: grup yang sudah punya master memakai kode yang sama
+  // (jangan buat kode baru/duplikat untuk konsep yang sudah ada).
+  const { keyToCode: existingKeyToCode } = await loadCatalogFromDb(db);
   /** @type {Map<string, { groupKey: string, perspective: string, names: Map<string, number>, unit: string, polarity: string, count: number }>} */
   const groups = new Map();
 
@@ -579,18 +602,28 @@ async function buildMasterPlanFromDb(db) {
   for (const [persp, list] of Object.entries(byPerspective)) {
     const prefix = PERSPECTIVE_PREFIX[persp] || 'GEN';
     let n = persp === 'financial' ? 2 : 1;
+    // Hitung nomor tertinggi yang sudah dipakai master lama agar kode baru lanjut (tidak menimpa).
+    const [masters] = await db.query('SELECT code FROM master_kpis');
+    const usedMasterCodes = new Set(masters.map((m) => String(m.code || '').toUpperCase()));
+    const codeTaken = (c) => usedCodes.has(c) || usedMasterCodes.has(c);
     for (const item of list) {
       let code;
-      do {
-        code = `KPI-${prefix}-${padCode(n)}`;
-        n += 1;
-      } while (usedCodes.has(code));
+      // Grup yang sudah punya master → pakai kode master lama itu sendiri.
+      const preset = existingKeyToCode[item.groupKey];
+      if (preset && !usedCodes.has(preset)) {
+        code = preset;
+      } else {
+        do {
+          code = `KPI-${prefix}-${padCode(n)}`;
+          n += 1;
+        } while (codeTaken(code));
+      }
       usedCodes.add(code);
       plan.push({
         ...item,
         code,
-        description: `Master KPI ${item.name} (${code}) — akumulasi seluruh unit/jabatan`,
-        objective: `Konsolidasi ${item.name}`,
+        description: `Master KPI ${item.name} (${code}) — akumulasi seluruh unit/jabatan`.slice(0, 240),
+        objective: `Konsolidasi ${item.name}`.slice(0, 250),
       });
     }
   }
@@ -676,7 +709,6 @@ async function setupAllMasterKpis(db) {
   for (const meta of plan) {
     aggregates.push(await aggregateMasterFromChildren(db, meta.code));
   }
-
   return {
     masters: plan.length,
     linked: link.linked,

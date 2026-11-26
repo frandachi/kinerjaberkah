@@ -23,7 +23,7 @@ function kbPolShow(pol, unit, ps, name){
   if(u==="score"||u.includes("indeks")||u.includes("skor")) return "maximize_b";
   return "maximize_a";
 }
-const KB_POL_FALLBACK=[{kode:"maximize_a",nama:"Maximize A",skala:"A"},{kode:"maximize_b",nama:"Maximize B",skala:"B"},{kode:"maximize_c",nama:"Maximize C",skala:"C"},{kode:"minimize_a",nama:"Minimize A",skala:"A"},{kode:"minimize_b",nama:"Minimize B",skala:"B"},{kode:"minimize_c",nama:"Minimize C",skala:"C"},{kode:"faster",nama:"Faster is better",skala:"B"}];
+const KB_POL_FALLBACK=[{kode:"maximize_a",nama:"Maximize A",skala:"A"},{kode:"maximize_b",nama:"Maximize B",skala:"B"},{kode:"maximize_c",nama:"Maximize C",skala:"C"},{kode:"minimize_a",nama:"Minimize A",skala:"A"},{kode:"minimize_b",nama:"Minimize B",skala:"B"},{kode:"minimize_c",nama:"Minimize C",skala:"C"},{kode:"minimize_d",nama:"Minimize D",skala:"C"},{kode:"faster",nama:"Faster is better",skala:"B"}];
 function kbPolItems(rows, current){
   const base=Array.isArray(rows)&&rows.length?rows:KB_POL_FALLBACK;
   const items=base.map(e=>({value:e.kode,label:e.nama||e.kode}));
