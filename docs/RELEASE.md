@@ -61,10 +61,9 @@ The script always returns you to `Dev` when finished.
 .\scripts\promote-to-release.ps1 -Tag v1.0.0 -Push
 ```
 
-After `release` is verified on remotes, delete the old branch:
+**Note:** Git cannot keep both `release` and `release/production` (nested ref). The promote script deletes local `release/production` before creating `release`. After remotes have `release` + tag, remove the legacy remote branch:
 
 ```bash
-git branch -D release/production
 git push origin --delete release/production
 git push server --delete release/production
 ```

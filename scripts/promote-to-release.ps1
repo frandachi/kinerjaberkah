@@ -57,22 +57,22 @@ server/license.json
 server/logs/
 server/uploads/
 
-# Non-production / clutter safety net
-docs/
-.cursor/
-db/
-tmp/
-dist/
-scripts/
-*.sql
-rekon-*
-Rekon*
-kpi_kc.json
-kpi_kck.json
-kpi_kcp.json
-kpi_pelaksana.json
-kpi_corporate_dump.sql
-tmp-*
+# Non-production / clutter safety net (root-scoped where needed)
+/docs/
+/.cursor/
+/db/
+/tmp/
+/dist/
+/scripts/
+/*.sql
+/rekon-*
+/Rekon*
+/kpi_kc.json
+/kpi_kck.json
+/kpi_kcp.json
+/kpi_pelaksana.json
+/kpi_corporate_dump.sql
+/tmp-*
 server/check_*
 server/test_*
 server/fix_*
@@ -278,6 +278,14 @@ try {
     Write-Host "File count: $fileCount"
     Write-Host 'DryRun complete.'
     return
+  }
+
+  # Git cannot have both refs/heads/release and refs/heads/release/production.
+  git show-ref --verify --quiet refs/heads/release/production
+  if ($LASTEXITCODE -eq 0) {
+    Write-Host 'Removing legacy branch release/production (blocks refs/heads/release)...'
+    git branch -D release/production
+    if ($LASTEXITCODE -ne 0) { throw 'Failed to delete release/production' }
   }
 
   $releaseExists = $false
