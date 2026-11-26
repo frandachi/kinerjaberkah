@@ -1,5 +1,5 @@
 const f = [
-  { value: 'maximize_a', label: 'Maximize A', shortLabel: 'Maximize A', formula: 'Pencapaian = (Realisasi ÷ Target) × 100%' },
+  { value: 'maximize_a', label: 'Maximize A', shortLabel: 'Maximize A', formula: 'IF(Target=0, IF(R>0,200%, IF(R=0,100%,0%)), MAX(0%,1+(R−T)/ABS(T)))' },
   { value: 'maximize_b', label: 'Maximize B', shortLabel: 'Maximize B', formula: 'Pencapaian = (Realisasi ÷ Target) × 100%' },
   { value: 'maximize_c', label: 'Maximize C', shortLabel: 'Maximize C', formula: 'Pencapaian = (Realisasi ÷ Target) × 100%' },
   { value: 'maximize', label: 'Maximize (More is better)', shortLabel: 'Maximize', formula: 'Pencapaian = (Realisasi ÷ Target) × 100%' },
@@ -98,12 +98,34 @@ function kbIndeks(p, polarity, unit, ps) {
   return kbIndeksFrom(p, (kbPol[kode] && kbPol[kode].batas) || kbBatasPreset.A);
 }
 
+/** Rollback Maximize A: set false → R/T×100%; Target=0 → 0%. */
+const KB_MAX_A_ZERO_TARGET_SPECIAL = true;
+function kbIsMaximizeA(polarity) {
+  const raw = String(polarity || '').trim().toLowerCase();
+  if (raw === 'maximize_b' || raw === 'maximize_c') return false;
+  if (raw === 'maximize_a') return true;
+  if (c(polarity) !== 'maximize') return false;
+  kbLoadPol();
+  const meta = kbPol[raw] || kbPolBase[raw];
+  if (meta && (meta.skala === 'B' || meta.skala === 'C')) return false;
+  return true;
+}
+/** IF(T=0, IF(R>0,200, IF(R=0,100,0)), MAX(0,1+(R−T)/ABS(T))*100) */
+function kbMaxAPencapaian(a, t) {
+  if (t === 0) {
+    if (a > 0) return 200;
+    if (a === 0) return 100;
+    return 0;
+  }
+  return Math.max(0, 1 + (a - t) / Math.abs(t)) * 100;
+}
+
 /**
  * Pencapaian % sesuai polaritas:
- * - Maximize A/B/C: (Realisasi ÷ Target) × 100% (target +/− sama)
+ * - Maximize A (flag): IF(T=0,…, MAX(0%,1+(R−T)/ABS(T)))
+ * - Maximize B/C: (Realisasi ÷ Target) × 100%
  * - Minimize: (Target ÷ Realisasi) × 100%
  * - Minimize C / stabilize: ROUND(Realisasi − Target, 2) %
- * - Target 0 & Realisasi 0 → Minimize/Faster 100%; Maximize 0%
  */
 function b(t, i, l = 'maximize', s = {}) {
   const a = parseFloat(t);
@@ -120,6 +142,7 @@ function b(t, i, l = 'maximize', s = {}) {
 
   if (e === 0 && a === 0) {
     if (n === 'minimize' || n === 'faster') return 100;
+    if (KB_MAX_A_ZERO_TARGET_SPECIAL && kbIsMaximizeA(l)) return kbMaxAPencapaian(a, e);
     return 0;
   }
 
@@ -137,7 +160,9 @@ function b(t, i, l = 'maximize', s = {}) {
     return a !== 0 ? (o / a) * 100 : 0;
   }
 
-  // Maximize A / B / C: Realisasi / Target × 100%
+  if (KB_MAX_A_ZERO_TARGET_SPECIAL && kbIsMaximizeA(l)) return kbMaxAPencapaian(a, e);
+
+  // Maximize B / C / flag off
   if (e === 0) return 0;
   return (a / e) * 100;
 }

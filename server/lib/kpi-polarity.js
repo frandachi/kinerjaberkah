@@ -1,4 +1,10 @@
 const POLARITY_VALUES = ['maximize', 'minimize', 'faster', 'range', 'stabilize'];
+/**
+ * Maximize A (Excel):
+ *   IF(Target=0, IF(R>0,200%, IF(R=0,100%,0%)), MAX(0%, 1+(R−T)/ABS(T)))
+ * Rollback: set false → R/T×100%; Target=0 → 0% (Maximize B/C tidak berubah).
+ */
+const MAXIMIZE_A_ZERO_TARGET_SPECIAL = true;
 const DEFAULT_BATAS = {
   A: [60, 100, 105, 110],
   B: [80, 100, 110, 120],
@@ -59,13 +65,40 @@ function normalizePolarity(polarity) {
   return 'maximize';
 }
 
+/** Maximize A saja (bukan B/C). Bare "maximize"/kosong di app = default skala A. */
+function isMaximizeA(polarity) {
+  const raw = String(polarity || '').trim().toLowerCase();
+  if (raw === 'maximize_b' || raw === 'maximize_c') return false;
+  if (raw === 'maximize_a') return true;
+  if (normalizePolarity(polarity) !== 'maximize') return false;
+  const skala = polaritySkala(polarity);
+  if (skala === 'B' || skala === 'C') return false;
+  return true;
+}
+
+/**
+ * Maximize A penuh (hasil dalam % untuk band skor):
+ * IF(T=0, IF(R>0,200, IF(R=0,100,0)), MAX(0, 1+(R−T)/ABS(T))*100)
+ */
+function maximizeAPencapaian(actual, target) {
+  const a = parseFloat(actual);
+  const t = parseFloat(target);
+  if (!Number.isFinite(a) || !Number.isFinite(t)) return 0;
+  if (t === 0) {
+    if (a > 0) return 200;
+    if (a === 0) return 100;
+    return 0;
+  }
+  const ach = 1 + (a - t) / Math.abs(t);
+  return Math.max(0, ach) * 100;
+}
+
 /**
  * Hitung % pencapaian sesuai polaritas:
- * - Maximize A/B/C: (Realisasi ÷ Target) × 100%  [wajib sama untuk target +/−]
+ * - Maximize A (flag): rumus Excel di maximizeAPencapaian
+ * - Maximize B/C: (Realisasi ÷ Target) × 100%; Target 0 → 0%
  * - Minimize/Faster: (Target ÷ Realisasi) × 100%
  * - Minimize C / stabilize: ROUND(Realisasi − Target, 2) %
- * - Target 0 & Realisasi 0 → Minimize/Faster 100%; Maximize 0%
- * - Target 0 & Realisasi ≠ 0 (Maximize) → 0%
  */
 function computePencapaianByPolarity(actual, target, polarity = 'maximize', options = {}) {
   const a = parseFloat(actual);
@@ -82,10 +115,12 @@ function computePencapaianByPolarity(actual, target, polarity = 'maximize', opti
   }
 
   // Target 0 & Realisasi 0:
-  // - Minimize/Faster: 100% (tidak ada biaya/kejadian)
-  // - Maximize: 0% (belum ada realisasi)
+  // - Minimize/Faster: 100%
+  // - Maximize A (flag): 100%
+  // - Maximize B/C / flag off: 0%
   if (t === 0 && a === 0) {
     if (mode === 'minimize' || mode === 'faster') return 100;
+    if (MAXIMIZE_A_ZERO_TARGET_SPECIAL && isMaximizeA(polarity)) return maximizeAPencapaian(a, t);
     return 0;
   }
 
@@ -104,9 +139,27 @@ function computePencapaianByPolarity(actual, target, polarity = 'maximize', opti
     return a !== 0 ? (ba / a) * 100 : 0;
   }
 
-  // Maximize A / B / C (dan maximize generik): Realisasi / Target × 100%
+  // Maximize A (flag aktif): rumus Excel penuh
+  if (MAXIMIZE_A_ZERO_TARGET_SPECIAL && isMaximizeA(polarity)) {
+    return maximizeAPencapaian(a, t);
+  }
+
+  // Maximize B / C / flag off: Realisasi / Target × 100%
   if (t === 0) return 0;
   return (a / t) * 100;
 }
 
-module.exports = { normalizePolarity, computePencapaianByPolarity, POLARITY_VALUES, setPolaritasMeta, polaritySkala, polarityBatas, DEFAULT_BATAS, MINIMIZE_A_BATAS, MINIMIZE_B_BATAS, MINIMIZE_C_BATAS };
+module.exports = {
+  normalizePolarity,
+  computePencapaianByPolarity,
+  isMaximizeA,
+  POLARITY_VALUES,
+  setPolaritasMeta,
+  polaritySkala,
+  polarityBatas,
+  DEFAULT_BATAS,
+  MINIMIZE_A_BATAS,
+  MINIMIZE_B_BATAS,
+  MINIMIZE_C_BATAS,
+  MAXIMIZE_A_ZERO_TARGET_SPECIAL,
+};

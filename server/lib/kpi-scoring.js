@@ -168,17 +168,17 @@ function computeYtdTarget(unitType, monthlyData, monthlyTarget) {
 }
 
 function computePencapaianTotal(monthlyData, monthlyTarget, unitType, polarity = 'maximize', annualTarget) {
-  const mode = normalizePolarity(polarity);
+  // Pass polarity mentah (maximize_a/b/c) — jangan normalize dulu agar aturan Target=0 Maximize A akurat.
   if (isSumTargetUnit(unitType)) {
     const dataMonths = filledMonths(monthlyData);
     if (!dataMonths.length) return 0;
     const targetMonths = new Set(filledMonths(monthlyTarget));
     const matched = dataMonths.filter((m) => targetMonths.has(m));
     if (matched.length) {
-      return computePencapaianByPolarity(sumMonths(monthlyData, matched), sumMonths(monthlyTarget, matched), mode);
+      return computePencapaianByPolarity(sumMonths(monthlyData, matched), sumMonths(monthlyTarget, matched), polarity);
     }
     const annual = parseFloat(annualTarget);
-    return computePencapaianByPolarity(sumMonths(monthlyData, dataMonths), Number.isNaN(annual) ? 0 : annual, mode);
+    return computePencapaianByPolarity(sumMonths(monthlyData, dataMonths), Number.isNaN(annual) ? 0 : annual, polarity);
   }
   let sum = 0;
   let count = 0;
@@ -188,7 +188,7 @@ function computePencapaianTotal(monthlyData, monthlyTarget, unitType, polarity =
     const actual = parseFloat(raw);
     if (Number.isNaN(actual)) return;
     const target = monthTargetValue(monthlyTarget, m, annualTarget);
-    sum += computePencapaianByPolarity(actual, target, mode);
+    sum += computePencapaianByPolarity(actual, target, polarity);
     count += 1;
   });
   // YTD (%) = ROUND(Σ pencapaian / bulan_berjalan, 2)
@@ -248,20 +248,84 @@ function stabilizeCuts() {
 }
 
 /**
- * NPL/NPF Gross di Excel = persen (0–~5). Upload sering salah skala (30 → maksud 0,30).
- * Jika target khas rasio (<10) tapi realisasi ≥10, anggap realisasi masih ×100.
+ * NPL/NPF Gross di Excel = persen. Upload sering salah skala (30 → 0,30; target 45 → 0,45).
+ * Kembalikan pasangan (aktual, target) yang sudah distabilkan ke skala % yang sama.
+ * Hindari false ÷100 pada NPL tinggi sah (mis. 11,3 vs target 9,8).
  */
-function normalizeStabilizeActual(actual, target, kpi) {
-  const a = parseFloat(actual);
-  const t = parseFloat(target);
-  if (!Number.isFinite(a) || !Number.isFinite(t)) return a;
+function normalizeStabilizePair(actual, target, kpi) {
+  let a = parseFloat(actual);
+  let t = parseFloat(target);
+  if (!Number.isFinite(a) || !Number.isFinite(t)) return { a, t };
   const name = String(kpi && kpi.name || '');
   const unit = normalizeUnit(kpi && kpi.unit);
   const isNpl = /\bnpl\b|\bnpf\b/i.test(name);
-  if (!isNpl && unit !== 'percentage') return a;
-  // Target rasio persen tipikal; realisasi tampak ×100 (30 vs target 1.09).
-  if (t > 0 && t < 10 && a >= 10) return a / 100;
-  return a;
+  if (!isNpl && unit !== 'percentage') return { a, t };
+
+  // Keduanya tampak ×100 (42 vs 15, 100 vs 82, 20 vs 12).
+  if (a >= 20 && t >= 10) return { a: a / 100, t: t / 100 };
+  // Keduanya 10–20 dan dekat: NPL tinggi sah (Karya/Melati).
+  if (a >= 10 && t >= 10) return { a, t };
+
+  // Hanya aktual tinggi vs target kecil.
+  if (a >= 10 && t < 10) {
+    // 11 vs 8: rasio dekat → jangan ÷100.
+    if (t >= 5 && a / Math.max(t, 1e-9) < 2.5) return { a, t };
+    // 96 vs 1,34 atau 46 vs 3 → aktual ×100.
+    if (a >= 20 || t < 5) return { a: a / 100, t };
+    return { a, t };
+  }
+
+  // Hanya target tinggi vs aktual kecil/normal.
+  if (t >= 10 && a < 10) {
+    // Negeri Lama: target ~90, aktual 1,17.
+    if (t >= 50 && a > 0 && a < 10) return { a, t: t / 100 };
+    // Sadabuan: target ~45, aktual 1,39 (desimal).
+    if (t >= 20 && a > 0 && a <= 5 && a !== Math.trunc(a)) return { a, t: t / 100 };
+    // Tanjung Medan / Cikampak: biarkan (Excel Average Index memakai nilai mentah).
+    return { a, t };
+  }
+
+  // Target 0, aktual bilangan bulat tinggi (Bahorok 8–13 → 0,08–0,13).
+  if (t === 0 && a >= 5) return { a: a / 100, t };
+
+  return { a, t };
+}
+
+/** @deprecated gunakan normalizeStabilizePair; tetap ada untuk kompatibilitas. */
+function normalizeStabilizeActual(actual, target, kpi) {
+  return normalizeStabilizePair(actual, target, kpi).a;
+}
+
+/**
+ * Deteksi skala salah di seluruh deret bulan (campuran aktual 1,06 + 83, target 7–10).
+ * Jika terdeteksi: target ÷100, aktual ≥10 ÷100 — selaras Average Index Excel (Talun Kenas).
+ */
+function detectStabilizeSeriesScale(monthPairs, kpi) {
+  const name = String(kpi && kpi.name || '');
+  const unit = normalizeUnit(kpi && kpi.unit);
+  const isNpl = /\bnpl\b|\bnpf\b/i.test(name);
+  if (!isNpl && unit !== 'percentage') return { divHighActual: false, divTarget: false };
+  const pairs = (monthPairs || []).filter(
+    (p) => Number.isFinite(p.a) && Number.isFinite(p.t)
+  );
+  if (pairs.length < 4) return { divHighActual: false, divTarget: false };
+  const targets = pairs.map((p) => p.t).sort((x, y) => x - y);
+  const medT = targets[Math.floor(targets.length / 2)];
+  const highA = pairs.filter((p) => p.a >= 20).length;
+  // Hanya aktual kecil desimal (1,06) — bukan bilangan bulat 1/2/6 (hindari false series Merek).
+  const smallDecimalA = pairs.filter((p) => p.a > 0 && p.a < 5 && p.a !== Math.trunc(p.a)).length;
+  if (medT >= 5 && medT <= 15 && highA >= 2 && smallDecimalA >= 2) {
+    return { divHighActual: true, divTarget: true };
+  }
+  return { divHighActual: false, divTarget: false };
+}
+
+function applySeriesScale(actual, target, seriesFix) {
+  let a = actual;
+  let t = target;
+  if (seriesFix && seriesFix.divTarget && Number.isFinite(t)) t = t / 100;
+  if (seriesFix && seriesFix.divHighActual && Number.isFinite(a) && a >= 10) a = a / 100;
+  return { a, t };
 }
 
 function stabilizeIndeks(actual, target) {
@@ -346,7 +410,8 @@ function computePencapaianForMonth(actual, target, kpi, polarity) {
   const t = parseFloat(target);
   if (Number.isNaN(a) || Number.isNaN(t)) return 0;
   if (isPertumbuhanOsKpi(kpi) && t !== 0) {
-    const ach = 1 + (a - t) / Math.abs(t);
+    // Sama keluarga rumus Maximize A Excel: MAX(0%, 1+(R−T)/ABS(T))
+    const ach = Math.max(0, 1 + (a - t) / Math.abs(t));
     return Math.round(ach * 100 * 10000) / 10000; // % (Excel ROUND(...,4) pada rasio)
   }
   return computePencapaianByPolarity(a, t, polarity);
@@ -361,6 +426,20 @@ function averageMonthlyScores(kpi, monthlyData, monthlyTarget) {
   const polarity = polarityForScore(kpi);
   const scoredKpi = polarity === kpi.polarity ? kpi : { ...kpi, polarity };
   const weight = parseFloat(kpi.weight) || 0;
+  const stabilize = usesStabilize(scoredKpi);
+  let seriesFix = { divHighActual: false, divTarget: false };
+  if (stabilize) {
+    const probe = [];
+    for (const m of MONTHS) {
+      if (!isMonthClosedForScore(m)) continue;
+      const raw = monthlyData?.[m];
+      if (raw === undefined || raw === null || raw === '') continue;
+      const actual = parseFloat(raw);
+      if (Number.isNaN(actual)) continue;
+      probe.push({ a: actual, t: monthTargetValue(monthlyTarget, m, kpi.target) });
+    }
+    seriesFix = detectStabilizeSeriesScale(probe, scoredKpi);
+  }
   const monthRows = [];
   for (const m of MONTHS) {
     if (!isMonthClosedForScore(m)) continue;
@@ -371,10 +450,11 @@ function averageMonthlyScores(kpi, monthlyData, monthlyTarget) {
     const target = monthTargetValue(monthlyTarget, m, kpi.target);
     let pencapaian;
     let indeks;
-    if (usesStabilize(scoredKpi)) {
-      const actualNorm = normalizeStabilizeActual(actual, target, scoredKpi);
-      pencapaian = computePencapaianByPolarity(actualNorm, target, 'stabilize');
-      indeks = stabilizeIndeks(actualNorm, target);
+    if (stabilize) {
+      const scaled = applySeriesScale(actual, target, seriesFix);
+      const pair = normalizeStabilizePair(scaled.a, scaled.t, scoredKpi);
+      pencapaian = computePencapaianByPolarity(pair.a, pair.t, 'stabilize');
+      indeks = stabilizeIndeks(pair.a, pair.t);
     } else {
       pencapaian = computePencapaianForMonth(actual, target, scoredKpi, polarity);
       indeks = computeIndeksFromPencapaian(pencapaian, polarity, unitType, kpi.perspective);
