@@ -1,0 +1,609 @@
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const db = require('../db');
+const authenticateToken = require('../middleware/auth');
+const authorizeRole = require('../middleware/authorize');
+const { auditMiddleware } = require('../middleware/audit');
+const { planAtasanSync } = require('../lib/atasanLangsung');
+
+const router = express.Router();
+const BCRYPT_ROUNDS = 12;
+
+const isBcryptHash = (hash) => {
+  return hash && (hash.startsWith('$2a$') || hash.startsWith('$2b$') || hash.startsWith('$2y$'));
+};
+
+router.get('/', authenticateToken, authorizeRole('superadmin', 'admin'), async (req, res) => {
+  try {
+    const { search = '', page = '1', limit = '100', unit_name = '' } = req.query;
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10) || 100));
+    const offset = (pageNum - 1) * limitNum;
+
+    const whereClauses = [];
+    const queryParams = [];
+
+    if (search) {
+      whereClauses.push('(name LIKE ? OR username LIKE ? OR npp LIKE ?)');
+      const searchParam = `%${search}%`;
+      queryParams.push(searchParam, searchParam, searchParam);
+    }
+
+    if (unit_name) {
+      whereClauses.push('LOWER(unit_name) = LOWER(?)');
+      queryParams.push(unit_name);
+    }
+
+    if (req.query.role) {
+      whereClauses.push('role = ?');
+      queryParams.push(String(req.query.role));
+    }
+
+    const statusFilter = String(req.query.status || '').trim().toLowerCase();
+    if (statusFilter === 'nonaktif') {
+      whereClauses.push("LOWER(COALESCE(status,'aktif')) = 'nonaktif'");
+    } else if (statusFilter === 'aktif') {
+      whereClauses.push("LOWER(COALESCE(status,'aktif')) <> 'nonaktif'");
+    }
+
+    const whereStr = whereClauses.length ? ` WHERE ${whereClauses.join(' AND ')}` : '';
+
+    const [countResult] = await db.query(`SELECT COUNT(*) as total FROM users${whereStr}`, queryParams);
+    const total = countResult[0]?.total ?? 0;
+
+    const [users] = await db.query(
+      `SELECT id, username, name, role, jabatan, unit_name, npp, supervisi_approval, created_at, last_login, COALESCE(status,'aktif') AS status, (locked_until IS NOT NULL AND locked_until > NOW()) AS locked FROM users${whereStr} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      [...queryParams, limitNum, offset]
+    );
+
+    res.json({
+      data: users,
+      total,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.max(1, Math.ceil(total / limitNum)),
+    });
+  } catch (error) {
+    console.error('Get users error:', error.message);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+  }
+});
+
+/** Ringkasan jumlah users vs pegawai (sumber kebenaran = pegawai) */
+router.get('/stats', authenticateToken, authorizeRole('superadmin', 'admin'), async (req, res) => {
+  try {
+    const [[u]] = await db.query('SELECT COUNT(*) AS c FROM users');
+    const [[p]] = await db.query('SELECT COUNT(*) AS c FROM pegawai');
+    // Sumber kebenaran: setiap pegawai harus punya user dengan pegawai_id = pegawai.id
+    const [[missing]] = await db.query(`
+      SELECT COUNT(*) AS c
+      FROM pegawai p
+      LEFT JOIN users u ON u.pegawai_id = p.id
+      WHERE u.id IS NULL
+    `);
+    const [[locked]] = await db.query(`
+      SELECT COUNT(*) AS c FROM users
+      WHERE locked_until IS NOT NULL AND locked_until > NOW()
+        AND LOWER(COALESCE(status,'aktif')) <> 'nonaktif'
+    `).catch(() => [[{ c: 0 }]]);
+    const [[inactive]] = await db.query(`
+      SELECT COUNT(*) AS c FROM users
+      WHERE LOWER(COALESCE(status,'aktif')) = 'nonaktif'
+    `).catch(() => [[{ c: 0 }]]);
+
+    const totalUsers = u?.c || 0;
+    const totalPegawai = p?.c || 0;
+    const missingUsers = missing?.c || 0;
+    const lockedCount = locked?.c || 0;
+    const inactiveCount = inactive?.c || 0;
+
+    res.json({
+      totalUsers,
+      totalPegawai,
+      missingUsers,
+      locked: lockedCount,
+      nonaktif: inactiveCount,
+      aktif: Math.max(0, totalUsers - lockedCount - inactiveCount),
+      synced: missingUsers === 0 && totalUsers >= totalPegawai,
+    });
+  } catch (error) {
+    console.error('Users stats error:', error.message);
+    res.status(500).json({ message: 'Gagal memuat statistik pengguna' });
+  }
+});
+
+/**
+ * Buat akun user untuk setiap pegawai yang belum punya user.
+ * Username/password default = NPP (atau id pegawai jika NPP kosong).
+ */
+router.get('/role-status', authenticateToken, authorizeRole('superadmin', 'admin'), async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT role,
+        SUM(LOWER(COALESCE(status,'aktif')) = 'nonaktif') AS nonaktif,
+        SUM(LOWER(COALESCE(status,'aktif')) <> 'nonaktif') AS aktif,
+        COUNT(*) AS total
+      FROM users
+      GROUP BY role
+      ORDER BY role
+    `);
+    res.json({ roles: rows });
+  } catch (error) {
+    console.error('Role status error:', error.message);
+    res.status(500).json({ message: 'Gagal memuat status role' });
+  }
+});
+
+router.post(
+  '/role-status',
+  authenticateToken,
+  authorizeRole('superadmin', 'admin'),
+  auditMiddleware('SET_ROLE_STATUS'),
+  async (req, res) => {
+    try {
+      const role = String(req.body.role || '').trim();
+      const status = String(req.body.status || '').trim().toLowerCase();
+      if (!role || !['aktif', 'nonaktif'].includes(status)) {
+        return res.status(400).json({ message: 'Role dan status (aktif/nonaktif) wajib diisi' });
+      }
+      if (role === 'superadmin') {
+        return res.status(400).json({ message: 'Role superadmin tidak dapat dinonaktifkan' });
+      }
+      if (status === 'nonaktif' && String(req.user.role || '') === role) {
+        return res.status(400).json({ message: 'Tidak dapat menonaktifkan role yang sedang Anda pakai' });
+      }
+      const [result] = await db.query('UPDATE users SET status = ? WHERE role = ?', [status, role]);
+      res.json({
+        success: true,
+        role,
+        status,
+        updated: result.affectedRows || 0,
+        message: status === 'nonaktif'
+          ? `Semua akun role ${role} dinonaktifkan`
+          : `Semua akun role ${role} diaktifkan`,
+      });
+    } catch (error) {
+      console.error('Set role status error:', error.message);
+      res.status(500).json({ message: 'Gagal mengubah status role' });
+    }
+  }
+);
+
+router.post(
+  '/:id/status',
+  authenticateToken,
+  authorizeRole('superadmin', 'admin'),
+  auditMiddleware('SET_USER_STATUS'),
+  async (req, res) => {
+    try {
+      const status = String(req.body.status || '').trim().toLowerCase();
+      if (!['aktif', 'nonaktif'].includes(status)) {
+        return res.status(400).json({ message: 'Status wajib aktif atau nonaktif' });
+      }
+      const [rows] = await db.query('SELECT id, role FROM users WHERE id = ?', [req.params.id]);
+      if (!rows.length) return res.status(404).json({ message: 'User tidak ditemukan' });
+      if (rows[0].role === 'superadmin') {
+        return res.status(400).json({ message: 'Akun superadmin tidak dapat dinonaktifkan' });
+      }
+      if (status === 'nonaktif' && String(req.user.id) === String(req.params.id)) {
+        return res.status(400).json({ message: 'Tidak dapat menonaktifkan akun yang sedang dipakai' });
+      }
+      await db.query('UPDATE users SET status = ? WHERE id = ?', [status, req.params.id]);
+      res.json({
+        success: true,
+        id: req.params.id,
+        status,
+        message: status === 'aktif' ? 'Akun diaktifkan' : 'Akun dinonaktifkan',
+      });
+    } catch (error) {
+      console.error('Set user status error:', error.message);
+      res.status(500).json({ message: 'Gagal mengubah status akun' });
+    }
+  }
+);
+
+router.post(
+  '/sync-from-pegawai',
+  authenticateToken,
+  authorizeRole('superadmin'),
+  auditMiddleware('SYNC_USERS_FROM_PEGAWAI'),
+  async (req, res) => {
+    try {
+      const [rows] = await db.query(`
+        SELECT p.id, p.name, p.npp, p.jabatan, p.unit_name
+        FROM pegawai p
+        LEFT JOIN users u ON u.pegawai_id = p.id
+        WHERE u.id IS NULL
+      `);
+
+      let created = 0;
+      let skipped = 0;
+      const errors = [];
+
+      for (const p of rows) {
+        const npp = String(p.npp || '').trim();
+        const usernameBase = npp || String(p.id).replace(/^peg_/, '') || `u${Date.now()}`;
+        let username = usernameBase;
+        let attempt = 0;
+        // Username harus unik; NPP boleh sama jika ada duplikat data pegawai
+        while (attempt < 8) {
+          const [exists] = await db.query('SELECT id FROM users WHERE username = ? LIMIT 1', [username]);
+          if (!exists.length) break;
+          attempt += 1;
+          username = `${usernameBase}_${attempt}`;
+        }
+        if (attempt >= 8) {
+          skipped += 1;
+          errors.push({ id: p.id, reason: 'username bentrok' });
+          continue;
+        }
+
+        const passwordSeed = npp || username;
+        const padded = passwordSeed.length >= 8
+          ? passwordSeed
+          : (passwordSeed + '00000000').slice(0, 8);
+
+        try {
+          const hashedPassword = await bcrypt.hash(padded, BCRYPT_ROUNDS);
+          const id = `user_${Date.now()}_${created}_${Math.random().toString(36).slice(2, 7)}`;
+          let nppValue = npp || username;
+          try {
+            await db.query(
+              `INSERT INTO users
+                (id, pegawai_id, name, username, password, jabatan, unit_name, role, supervisi_approval, npp)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'user', '', ?)`,
+              [
+                id,
+                p.id,
+                p.name || username,
+                username,
+                hashedPassword,
+                p.jabatan || '',
+                p.unit_name || '',
+                nppValue,
+              ]
+            );
+          } catch (dupErr) {
+            // Jika npp UNIQUE bentrok, pakai suffix
+            if (String(dupErr.message || '').toLowerCase().includes('duplicate')) {
+              nppValue = `${nppValue}_${created + 1}`;
+              await db.query(
+                `INSERT INTO users
+                  (id, pegawai_id, name, username, password, jabatan, unit_name, role, supervisi_approval, npp)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 'user', '', ?)`,
+                [
+                  id,
+                  p.id,
+                  p.name || username,
+                  username,
+                  hashedPassword,
+                  p.jabatan || '',
+                  p.unit_name || '',
+                  nppValue,
+                ]
+              );
+            } else {
+              throw dupErr;
+            }
+          }
+          created += 1;
+        } catch (e) {
+          skipped += 1;
+          errors.push({ id: p.id, reason: e.message });
+        }
+      }
+
+      const [[u]] = await db.query('SELECT COUNT(*) AS c FROM users');
+      const [[pg]] = await db.query('SELECT COUNT(*) AS c FROM pegawai');
+
+      res.json({
+        message: `Sinkronisasi selesai: ${created} user dibuat`,
+        created,
+        skipped,
+        totalUsers: u?.c || 0,
+        totalPegawai: pg?.c || 0,
+        errors: errors.slice(0, 20),
+      });
+    } catch (error) {
+      console.error('Sync users from pegawai error:', error.message);
+      res.status(500).json({ message: 'Gagal sinkronisasi: ' + error.message });
+    }
+  }
+);
+
+router.post('/', authenticateToken, authorizeRole('superadmin'), auditMiddleware('CREATE_USER'), async (req, res) => {
+  try {
+    const { name, username, password, jabatan, unit_name, role, supervisi_approval, npp } = req.body;
+
+    if (!username || !name) {
+      return res.status(400).json({ message: 'Username dan nama wajib diisi' });
+    }
+
+    if (!password || password.length < 8) {
+      return res.status(400).json({ message: 'Password wajib diisi minimal 8 karakter' });
+    }
+
+    const cleanUsername = String(username).trim();
+    const cleanNpp = String(npp || '').trim() || cleanUsername;
+
+    const [sameUsername] = await db.query('SELECT name, npp FROM users WHERE username = ? LIMIT 1', [cleanUsername]);
+    if (sameUsername.length > 0) {
+      const owner = sameUsername[0];
+      return res.status(409).json({
+        message: `Username "${cleanUsername}" sudah dipakai oleh ${owner.name || '-'} (NPP ${owner.npp || '-'}). Gunakan username lain atau edit user tersebut.`,
+      });
+    }
+    const [sameNpp] = await db.query('SELECT name, username FROM users WHERE npp = ? LIMIT 1', [cleanNpp]);
+    if (sameNpp.length > 0) {
+      const owner = sameNpp[0];
+      return res.status(409).json({
+        message: `NPP "${cleanNpp}" sudah punya akun: ${owner.name || '-'} (username ${owner.username || '-'}). Edit user tersebut bila perlu.`,
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    const id = `user_${Date.now()}`;
+
+    const [existingPegawai] = await db.query('SELECT id FROM pegawai WHERE npp = ? LIMIT 1', [cleanNpp]);
+    let pegawai_id = existingPegawai[0]?.id;
+    if (!pegawai_id) {
+      pegawai_id = `peg_${Date.now()}`;
+      await db.query(
+        'INSERT INTO pegawai (id, name, npp, jabatan, unit_name) VALUES (?, ?, ?, ?, ?)',
+        [pegawai_id, name || '', cleanNpp, jabatan || '', unit_name || '']
+      );
+    }
+
+    await db.query(
+      'INSERT INTO users (id, pegawai_id, name, username, password, jabatan, unit_name, role, supervisi_approval, npp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, pegawai_id, name || '', cleanUsername, hashedPassword, jabatan || '', unit_name || '', role || 'user', supervisi_approval || '', cleanNpp]
+    );
+
+    const [users] = await db.query(
+      'SELECT id, username, name, role, jabatan, unit_name, npp, supervisi_approval, created_at FROM users WHERE id = ?',
+      [id]
+    );
+
+    res.status(201).json(users[0]);
+  } catch (error) {
+    console.error('Create user error:', error.message);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+  }
+});
+
+router.put('/:id', authenticateToken, authorizeRole('superadmin'), auditMiddleware('UPDATE_USER'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, username, password, jabatan, unit_name, role, supervisi_approval, npp } = req.body;
+
+    const [existingUsers] = await db.query('SELECT pegawai_id, role FROM users WHERE id = ?', [id]);
+    if (existingUsers.length === 0) {
+      return res.status(404).json({ message: 'User tidak ditemukan' });
+    }
+
+    const pegawai_id = existingUsers[0].pegawai_id;
+    const nextRole = role === undefined || role === null || role === ''
+      ? existingUsers[0].role
+      : role;
+
+    await db.query(
+      'UPDATE pegawai SET name=?, npp=?, jabatan=?, unit_name=? WHERE id=?',
+      [name || '', npp || username || '', jabatan || '', unit_name || '', pegawai_id]
+    );
+
+    if (password) {
+      const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
+      await db.query(
+        'UPDATE users SET name=?, username=?, password=?, jabatan=?, unit_name=?, role=?, supervisi_approval=?, npp=? WHERE id=?',
+        [name || '', username || '', hashedPassword, jabatan || '', unit_name || '', nextRole, supervisi_approval || '', npp || username || '', id]
+      );
+    } else {
+      await db.query(
+        'UPDATE users SET name=?, username=?, jabatan=?, unit_name=?, role=?, supervisi_approval=?, npp=? WHERE id=?',
+        [name || '', username || '', jabatan || '', unit_name || '', nextRole, supervisi_approval || '', npp || username || '', id]
+      );
+    }
+
+    const [users] = await db.query(
+      'SELECT id, username, name, role, jabatan, unit_name, npp, supervisi_approval FROM users WHERE id = ?',
+      [id]
+    );
+
+    res.json(users[0]);
+  } catch (error) {
+    console.error('Update user error:', error.message);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+  }
+});
+
+router.delete('/:id', authenticateToken, authorizeRole('superadmin'), auditMiddleware('DELETE_USER'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [existingUsers] = await db.query('SELECT pegawai_id FROM users WHERE id = ?', [id]);
+    if (existingUsers.length === 0) {
+      return res.status(404).json({ message: 'User tidak ditemukan' });
+    }
+
+    await db.query('DELETE FROM users WHERE id = ?', [id]);
+    await db.query('DELETE FROM pegawai WHERE id = ?', [existingUsers[0].pegawai_id]);
+
+    res.json({ message: 'User berhasil dihapus' });
+  } catch (error) {
+    console.error('Delete user error:', error.message);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+  }
+});
+
+
+router.post('/sync-atasan-langsung', authenticateToken, authorizeRole('superadmin', 'admin'), auditMiddleware('SYNC_ATASAN_LANGSUNG'), async (req, res) => {
+  try {
+    const onlyEmpty = !!(req.body && req.body.onlyEmpty);
+    const dryRun = !!(req.body && req.body.dryRun);
+    const [users] = await db.query(
+      'SELECT id, name, npp, jabatan, unit_name, supervisi_approval FROM users WHERE role != ?',
+      ['superadmin']
+    );
+    const { updates, unresolved, skipped } = planAtasanSync(users, { onlyEmpty });
+
+    if (!dryRun && updates.length > 0) {
+      for (const row of updates) {
+        await db.query('UPDATE users SET supervisi_approval = ? WHERE id = ?', [row.to, row.id]);
+      }
+    }
+
+    res.json({
+      message: dryRun
+        ? 'Preview pemetaan atasan dari struktur organisasi'
+        : 'Atasan langsung disesuaikan dari struktur organisasi',
+      dryRun,
+      onlyEmpty,
+      updated: dryRun ? 0 : updates.length,
+      planned: updates.length,
+      unresolved,
+      skipped,
+      samples: updates.slice(0, 20),
+    });
+  } catch (error) {
+    console.error('Sync atasan langsung error:', error.message);
+    res.status(500).json({ message: 'Gagal menyesuaikan atasan langsung' });
+  }
+});
+
+router.post('/update-supervisor', authenticateToken, authorizeRole('superadmin', 'admin'), auditMiddleware('UPDATE_SUPERVISOR'), async (req, res) => {
+  try {
+    const { npp, supervisi_approval } = req.body;
+
+    if (!npp) {
+      return res.status(400).json({ message: 'NPP wajib diisi' });
+    }
+
+    await db.query('UPDATE users SET supervisi_approval = ? WHERE npp = ?', [supervisi_approval || '', npp]);
+
+    res.json({ message: 'Supervisor berhasil diperbarui' });
+  } catch (error) {
+    console.error('Update supervisor error:', error.message);
+    res.status(500).json({ message: 'Terjadi kesalahan pada server' });
+  }
+});
+
+async function ensureRolePermissionsTable() {
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS role_permissions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        role_id VARCHAR(50) NOT NULL,
+        permissions JSON NOT NULL,
+        updated_by VARCHAR(100) NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_role_id (role_id)
+      )
+    `);
+  } catch (err) {
+    console.warn('ensureRolePermissionsTable error:', err.message);
+  }
+}
+ensureRolePermissionsTable().catch(() => {});
+
+router.get('/role-permissions', authenticateToken, async (req, res) => {
+  try {
+    await ensureRolePermissionsTable();
+    const [rows] = await db.query('SELECT role_id, permissions FROM role_permissions');
+    const merged = {};
+    for (const r of rows) {
+      let p = r.permissions;
+      if (typeof p === 'string') {
+        try { p = JSON.parse(p); } catch {}
+      }
+      if (p && typeof p === 'object') {
+        Object.assign(merged, p);
+      }
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ success: true, permissions: merged });
+  } catch (error) {
+    console.error('Get role-permissions error:', error.message);
+    res.status(500).json({ message: 'Gagal mengambil data kewenangan role', permissions: {} });
+  }
+});
+
+router.post(
+  '/role-permissions',
+  authenticateToken,
+  authorizeRole('superadmin'),
+  auditMiddleware('UPDATE_ROLE_PERMISSIONS'),
+  async (req, res) => {
+    try {
+      await ensureRolePermissionsTable();
+      const { permissions, role_id } = req.body;
+
+      if (!permissions || typeof permissions !== 'object') {
+        return res.status(400).json({ message: 'Format data kewenangan role tidak valid' });
+      }
+
+      // Kelompokkan per role_id (format key: ${role}::${module}::${action})
+      const roleBuckets = {};
+      for (const [key, val] of Object.entries(permissions)) {
+        const parts = key.split('::');
+        const rId = parts.length > 1 ? parts[0] : (role_id || 'custom');
+        if (!roleBuckets[rId]) roleBuckets[rId] = {};
+        roleBuckets[rId][key] = !!val;
+      }
+
+      if (role_id && !roleBuckets[role_id]) {
+        roleBuckets[role_id] = {};
+      }
+
+      for (const [rId, perms] of Object.entries(roleBuckets)) {
+        await db.query(
+          `INSERT INTO role_permissions (role_id, permissions, updated_by)
+           VALUES (?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             permissions = VALUES(permissions),
+             updated_by = VALUES(updated_by)`,
+          [rId, JSON.stringify(perms), req.user.username || req.user.id || 'superadmin']
+        );
+      }
+
+      res.json({
+        success: true,
+        message: 'Kewenangan role berhasil disimpan ke database',
+        permissions,
+      });
+    } catch (error) {
+      console.error('Save role-permissions error:', error.message);
+      res.status(500).json({ message: 'Gagal menyimpan kewenangan role: ' + error.message });
+    }
+  }
+);
+
+router.post(
+  '/role-permissions/reset',
+  authenticateToken,
+  authorizeRole('superadmin'),
+  auditMiddleware('RESET_ROLE_PERMISSIONS'),
+  async (req, res) => {
+    try {
+      await ensureRolePermissionsTable();
+      const { role_id } = req.body;
+
+      if (role_id && role_id !== 'all') {
+        await db.query('DELETE FROM role_permissions WHERE role_id = ?', [role_id]);
+      } else {
+        await db.query('DELETE FROM role_permissions');
+      }
+
+      res.json({
+        success: true,
+        message: role_id && role_id !== 'all'
+          ? `Kewenangan role ${role_id} berhasil direset ke pengaturan awal`
+          : 'Semua kewenangan role berhasil direset ke pengaturan awal',
+      });
+    } catch (error) {
+      console.error('Reset role-permissions error:', error.message);
+      res.status(500).json({ message: 'Gagal mereset kewenangan role' });
+    }
+  }
+);
+
+module.exports = router;

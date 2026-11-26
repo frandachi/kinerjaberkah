@@ -1,0 +1,9 @@
+# Blok akses langsung Apache ke folder Node (API hanya lewat /kinerjaberkah/api → Passenger).
+# Tanpa ini, /kinerjaberkah/server/uploads/*.php bisa dieksekusi (PHP webshell).
+Options -Indexes -ExecCGI
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+  Deny from all
+</IfModule>
