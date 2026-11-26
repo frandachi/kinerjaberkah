@@ -1,16 +1,8 @@
 ._*
 .DS_Store
-._*
-.DS_Store
 node_modules
 
-# Environment secrets and runtime state
-.env
-.env.*
-!.env.example
-server/.env
-server/.env.*
-!server/.env.example
+# Runtime state (secrets .env MAY be committed on Dev)
 server/license.json
 server/logs/
 server/uploads/
