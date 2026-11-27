@@ -872,8 +872,8 @@ async function buildPdfExport(ce){
     rep._idx=ri;
     return rep;
   });
-  // A3 landscape agar 12 bulan × 4 kolom tetap terbaca
-  const doc=buildPdf(JsPDF,reports,year,"a3",{kind:"unit"});
+  // A3 landscape agar 12 bulan × 4 kolom tetap terbaca; halaman Ranking dulu (sama seperti Excel)
+  const doc=buildPdf(JsPDF,reports,year,"a3",{kind:"unit",monthLabel,ranking:rankingRows});
   const scope=rankingRows.length===1?rankingRows[0].kantor:monthLabel;
   doc.save(`Scorecard_Unit_${safeFilePart(scope)}_${year}.pdf`);
   return reports.length;

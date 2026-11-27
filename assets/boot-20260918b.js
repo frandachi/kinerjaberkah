@@ -23,7 +23,7 @@
   // puluhan MB (MonthLine 650KB, dll) di setiap deploy.
   const BASE = "/kinerjaberkah/assets/";
   const CANON = "index-CdyJlLvAQ.js";
-  const VERSION = "20261127b";
+  const VERSION = "20261127c";
   try { localStorage.removeItem("kb_periode_settings"); } catch {}
   const LS_KEY = "kb_index_cache_v";
 

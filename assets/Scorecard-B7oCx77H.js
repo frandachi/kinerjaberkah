@@ -82,7 +82,7 @@ async function kbTSPdf(list,monthSel){
   const{year,monthLabel,ce,rankingRows}=await kbTSBuild(list,monthSel);
   if(!rankingRows.length)throw new Error("Tidak ada KPI Unit pada filter ini");
   const reports=rankingRows.map((r,ri)=>{const rep=buildUnitReport(r.unit,ce[r.unit]||[],{kantor:r.kantor,tipe:r.tipe||""});rep._idx=ri;return rep});
-  const doc=buildPdf(JsPDF,reports,year,"a3",{kind:"unit"});
+  const doc=buildPdf(JsPDF,reports,year,"a3",{kind:"unit",monthLabel,ranking:rankingRows});
   const scope=rankingRows.length===1?rankingRows[0].kantor:monthLabel;
   doc.save(`Scorecard_KPI_Unit_${safeFilePart(String(scope))}_${year}.pdf`);
   return reports.length;

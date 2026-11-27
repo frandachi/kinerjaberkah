@@ -520,6 +520,47 @@ export function buildPdf(JsPDF, reports, year, paper = "a4", opts = {}) {
   const lineH = 2.1 * scale;
   const headH1 = 4.5 * scale, headH2 = 4 * scale;
 
+  let pageUsed = false;
+  /** Halaman Ranking Unit (cermin sheet "Unit Kerja"/"Kantor Cabang" di Excel). */
+  function rankingPage(rows, title, nameCol) {
+    if (pageUsed) doc.addPage();
+    pageUsed = true;
+    let y = M;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11 * scale);
+    setText(RGB.text);
+    doc.text(`RANKING ${String(title).toUpperCase()} — NILAI PERIODE ${String(opts.monthLabel || "").toUpperCase()} ${year}`, M, y + 4.5);
+    y += 8 * scale;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5 * scale);
+    setText(RGB.muted);
+    doc.text(`Dicetak ${new Date().toLocaleString("id-ID")}  ·  ${rows.length} unit`, M, y + 2);
+    y += 5 * scale;
+    const cols = [6 * scale, 14 * scale, 40 * scale, 14 * scale, 18 * scale];
+    const heads = ["No", "Kode", nameCol, "Total Nilai", "Kategori Nilai"];
+    const rh = 5 * scale;
+    let x = M;
+    heads.forEach((t, i) => { cell(x, y, cols[i], rh, t, { fill: [30, 58, 138], bold: true, color: [255, 255, 255], align: i === 2 ? "left" : "center" }); x += cols[i]; });
+    y += rh;
+    rows.forEach((r, i) => {
+      const indeks = r.indeks != null ? r.indeks : (r.skor < 1.5 ? 1 : r.skor < 2.5 ? 2 : r.skor < 3.5 ? 3 : r.skor < 4.5 ? 4 : 5);
+      const ic = INDEKS_CELL[indeks] || RGB.head;
+      x = M;
+      cell(x, y, cols[0], rh, i + 1, { align: "center", color: RGB.muted }); x += cols[0];
+      cell(x, y, cols[1], rh, r.kode != null && r.kode !== "" ? String(r.kode) : "", { align: "center" }); x += cols[1];
+      cell(x, y, cols[2], rh, r.kantor || r.unit || "", { align: "left" }); x += cols[2];
+      cell(x, y, cols[3], rh, r.skor != null && Number.isFinite(Number(r.skor)) ? Number(r.skor).toFixed(2) : "—", { align: "center", bold: true }); x += cols[3];
+      cell(x, y, cols[4], rh, r.kategori || "-", { align: "center", bold: true, fill: ic.fill, color: ic.text });
+      y += rh;
+      if (y + rh > H - M) {
+        doc.addPage();
+        y = M;
+        x = M;
+        heads.forEach((t, i2) => { cell(x, y, cols[i2], rh, t, { fill: [30, 58, 138], bold: true, color: [255, 255, 255], align: i2 === 2 ? "left" : "center" }); x += cols[i2]; });
+        y += rh;
+      }
+    });
+  }
   const setFill = (c) => doc.setFillColor(c[0], c[1], c[2]);
   const setText = (c) => doc.setTextColor(c[0], c[1], c[2]);
   const setDraw = (c) => doc.setDrawColor(c[0], c[1], c[2]);
@@ -552,6 +593,13 @@ export function buildPdf(JsPDF, reports, year, paper = "a4", opts = {}) {
       doc.text(ln, tx, ty, { align: o.align === "left" ? "left" : o.align === "right" ? "right" : "center" });
       ty += lineH;
     });
+  }
+
+  if (kind === "unit" && Array.isArray(opts.ranking) && opts.ranking.length) {
+    const pusat = opts.ranking.filter((r) => !r.isCabang);
+    const cabang = opts.ranking.filter((r) => r.isCabang);
+    if (pusat.length) rankingPage(pusat, "Unit Kerja", "Unit Kerja");
+    if (cabang.length) rankingPage(cabang, "Kantor Cabang", "Kantor Cabang");
   }
 
   function header(r, y, cont) {
@@ -593,7 +641,8 @@ export function buildPdf(JsPDF, reports, year, paper = "a4", opts = {}) {
   }
 
   reports.forEach((r, ri) => {
-    if (ri > 0) doc.addPage();
+    if (ri > 0 || pageUsed) doc.addPage();
+    pageUsed = true;
     let y = header(r, M, false);
     doc.setFontSize(base);
     const heights = r.rows.map((row) => {
