@@ -1,4 +1,4 @@
-import{r as y,j as e,c as I,aD as me,B as $e,q as Dl,as as ChevronsUpDown,aq as CheckIcon}from"./ui-Bxdhc9mB.js";
+import{r as y,j as e,c as I,aD as me,B as $e,q as Dl,aN as PdfIcon,as as ChevronsUpDown,aq as CheckIcon}from"./ui-Bxdhc9mB.js";
 import{I as fe,B as T,a as _,c as P,u as qe,b as Ve}from"./index-CdyJlLvAQ.js";
 import{u as se,b as qc,c as useMut}from"./query-7fhvqgVT.js";
 import{S as He}from"./skeleton-7xRvmPlJ.js";
@@ -835,7 +835,7 @@ function buildRankingRowsFromGroups(ce, {formatUnitKerja, isUnitCabang}={}){
 }
 
 async function buildExport(ce){
-  const[{buildUnitRankingWorkbook,nilaiPeriodeMonthLabel,formatUnitKerja,isUnitCabang,safeFilePart},XS]=await Promise.all([
+  const[{buildUnitRankingWorkbook,appendUnitScorecardSheets,nilaiPeriodeMonthLabel,formatUnitKerja,isUnitCabang,safeFilePart},XS]=await Promise.all([
     import("./kpi-individu-export-Core01.js"),
     import("./xlsx-style-01.js")
   ]);
@@ -844,9 +844,39 @@ async function buildExport(ce){
   // WAJIB: dataset & skor sama persis dengan yang tampil di UI KPI Unit
   const rankingRows=buildRankingRowsFromGroups(ce,{formatUnitKerja,isUnitCabang});
   const wb=buildUnitRankingWorkbook(XS.utils,rankingRows,{year,monthLabel});
+  // Sheet scorecard detail per unit (perspektif, KPI, bobot, 12 bulan × Realisasi/Target/Pencapaian/Skor, YTD, Status)
+  appendUnitScorecardSheets(XS.utils,wb,ce,{
+    year,monthLabel,
+    metaFor:(unit,rows)=>{
+      const r=rankingRows.find(x=>x.unit===unit)||{};
+      return{kantor:r.kantor||unit,tipe:r.tipe||""};
+    }
+  });
   const scope=rankingRows.length===1?rankingRows[0].kantor:monthLabel;
   XS.writeFile(wb,`Laporan_Unit_${safeFilePart(scope)}_${year}.xlsx`);
   return rankingRows.length;
+}
+
+/** Export PDF scorecard lengkap semua unit pada filter (1 halaman per unit). */
+async function buildPdfExport(ce){
+  const[{buildUnitReport,buildPdf,nilaiPeriodeMonthLabel,formatUnitKerja,isUnitCabang,safeFilePart}]=await Promise.all([
+    import("./kpi-individu-export-Core01.js")
+  ]);
+  const{P:JsPDF}=await import("./KPIIndividu-MonthLine03.js");
+  const year=new Date().getFullYear();
+  const monthLabel=nilaiPeriodeMonthLabel();
+  const rankingRows=buildRankingRowsFromGroups(ce,{formatUnitKerja,isUnitCabang});
+  const reports=rankingRows.map((r,ri)=>{
+    const rows=ce[r.unit]||[];
+    const rep=buildUnitReport(r.unit,rows,{kantor:r.kantor,tipe:TIPE_LABEL[r.tipe]||r.tipe||""});
+    rep._idx=ri;
+    return rep;
+  });
+  // A3 landscape agar 12 bulan × 4 kolom tetap terbaca
+  const doc=buildPdf(JsPDF,reports,year,"a3",{kind:"unit"});
+  const scope=rankingRows.length===1?rankingRows[0].kantor:monthLabel;
+  doc.save(`Scorecard_Unit_${safeFilePart(scope)}_${year}.pdf`);
+  return reports.length;
 }
 
 function qt(){
@@ -1031,6 +1061,7 @@ function qt(){
   };
 
   const[exporting,setExporting]=y.useState(!1);
+  const[exportingPdf,setExportingPdf]=y.useState(!1);
   const[syncing,setSyncing]=y.useState(!1);
   const onSync=async()=>{
     if(!window.confirm("Sinkronisasi menimpa KPI Unit agar sama dengan KPI Individu pemimpin Divisi, Departemen, UKK, Unit, Cabang, dan Project. Lanjutkan?"))return;
@@ -1056,12 +1087,28 @@ function qt(){
     try{
       // Pakai `ce` yang sama dengan ranking + scorecard di UI
       const n=await buildExport(ce);
-      U({title:"Export berhasil",description:`File Excel ranking (${n} unit) — skor & status sama dengan UI KPI Unit.`});
+      U({title:"Export berhasil",description:`Excel ranking + scorecard detail ${n} unit (realisasi, target, pencapaian, skor per bulan) — sama dengan UI KPI Unit.`});
     }catch(err){
       console.error("Export KPI Unit error:",err);
       U({title:"Gagal export",description:(err&&err.message)||"Gagal membuat Excel",variant:"destructive"});
     }finally{
       setExporting(!1);
+    }
+  };
+  const onExportPdf=async()=>{
+    if(!Object.keys(ce).length){
+      U({title:"Tidak ada data",description:"Tampilkan data unit terlebih dahulu.",variant:"destructive"});
+      return;
+    }
+    setExportingPdf(!0);
+    try{
+      const n=await buildPdfExport(ce);
+      U({title:"Export PDF berhasil",description:`Scorecard lengkap ${n} unit — satu halaman per unit, sama dengan UI KPI Unit.`});
+    }catch(err){
+      console.error("Export PDF KPI Unit error:",err);
+      U({title:"Gagal export PDF",description:(err&&err.message)||"Gagal membuat PDF",variant:"destructive"});
+    }finally{
+      setExportingPdf(!1);
     }
   };
 
@@ -1076,6 +1123,9 @@ function qt(){
         !isUser?e.jsx(T,{variant:"outline",size:"sm",className:"h-9",disabled:syncing,onClick:onSync,children:syncing?"Menyinkronkan...":"Sinkronisasi KPI Unit"}):null,
         shown&&O.length>0?e.jsxs(T,{variant:"outline",size:"sm",className:"h-9",disabled:exporting,onClick:onExport,children:[
           e.jsx(Dl,{className:"w-3.5 h-3.5 mr-1.5"}),exporting?"Menyiapkan...":"Export Excel"
+        ]}):null,
+        shown&&O.length>0?e.jsxs(T,{variant:"outline",size:"sm",className:"h-9",disabled:exportingPdf,onClick:onExportPdf,children:[
+          e.jsx(PdfIcon,{className:"w-3.5 h-3.5 mr-1.5"}),exportingPdf?"Menyiapkan...":"Export PDF"
         ]}):null
       ]}):null
     }),

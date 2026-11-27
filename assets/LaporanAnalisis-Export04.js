@@ -47,7 +47,7 @@ const NL=String.fromCharCode(10);
 const wantUnit=q==="per-unit"||!!V.unit;
 if((ce==="xlsx"||ce==="csv")&&wantUnit){
 try{
-const[{buildUnitRankingWorkbook,formatUnitKerja,isUnitCabang},XS]=await Promise.all([import("./kpi-individu-export-Core01.js"),import("./xlsx-style-01.js")]);
+const[{buildUnitRankingWorkbook,appendUnitScorecardSheets,formatUnitKerja,isUnitCabang},XS]=await Promise.all([import("./kpi-individu-export-Core01.js"),import("./xlsx-style-01.js")]);
 const by=new Map();
 const unitSrc=dedupeUnitKpisForExport((Array.isArray(xUnit)&&xUnit.length?xUnit:x).filter(k=>{
   if(!isUnitScorecardKpi(k))return!1;
@@ -80,6 +80,13 @@ const url=URL.createObjectURL(blob);const aEl=document.createElement("a");aEl.hr
 Ke.success("Export berhasil diunduh");return;
 }
 const wb=buildUnitRankingWorkbook(XS.utils,rankingRows,{year:Number(K),monthLabel});
+// Sheet scorecard detail per unit (sama dengan halaman KPI Unit) untuk laporan per-unit/export
+try{
+const by2=new Map([...by.entries()].map(([key,g])=>{const disp=pickUnitDisplayNameExp(key,g.names)||g.names[0]||key;return[disp,g.rows]}));
+const ceObj={};
+for(const u of rankingRows.slice(0,80).map(r=>r.unit)){if(by2.has(u))ceObj[u]=by2.get(u)}
+appendUnitScorecardSheets(XS.utils,wb,ceObj,{year:Number(K),monthLabel});
+}catch(eSc){console.warn("Sheet scorecard unit:",eSc)}
 if(q!=="per-unit"&&(V.summary||V.perspective||V.individu||V.raw)){
 const extra=[];
 if(V.summary){extra.push({Bagian:"Ringkasan",Item:"Total KPI",Nilai:f.kpiTotal||f.scoredCount||0});extra.push({Bagian:"Ringkasan",Item:"Rata-rata Pencapaian",Nilai:f.pencapaianTotal});extra.push({Bagian:"Ringkasan",Item:"Skor Akhir",Nilai:f.skorAkhir!=null?f.skorAkhir:f.skorTotal});extra.push({Bagian:"Ringkasan",Item:"Klasifikasi",Nilai:f.klasifikasi})}

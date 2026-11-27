@@ -1,5 +1,5 @@
-import { c as scoreKpi, g as monthTarget, i as hasMonth, b as polarityPct, M as MONTHS } from "./kpi-scoring-Zero03.js";
-import { p as skorInfo, n as cloneKpi, r as pencapaianInfo } from "./kpi-summary-Zero03.js";
+import { c as scoreKpi, g as monthTarget, i as hasMonth, b as polarityPct, M as MONTHS, y as kbY, kbMonthClosed } from "./kpi-scoring-Zero03.js";
+import { c as statsKpis, p as skorInfo, n as cloneKpi, r as pencapaianInfo, v as kbNilaiAkhir } from "./kpi-summary-Zero03.js";
 import { n as normUnit, g as unitLabel } from "./kpi-units-Bpgxx_sX.js";
 import { g as persLabel, c as persSort, n as normPers } from "./kpi-perspective-fFNWJAaz.js";
 
@@ -42,6 +42,63 @@ function parseJson(v) {
   } catch {
     return {};
   }
+}
+
+/* ── Scorecard unit: rumus identik dengan tabel detail halaman KPI Unit ── */
+
+/** Realisasi kumulatif sampai bulan `month` (satuan currency/number = Σ, lainnya = nilai terakhir). */
+function unitRealisasiTo(k, unitKind, month) {
+  const md = parseJson(k.monthly_data);
+  const idx = MONTHS.indexOf(month);
+  if (idx < 0) return null;
+  let last = null;
+  for (let i = 0; i <= idx; i++) {
+    const raw = md[MONTHS[i]];
+    if (raw == null || raw === "") continue;
+    const n = parseFloat(String(raw).replace(",", "."));
+    if (!Number.isFinite(n)) continue;
+    last = unitKind === "currency" || unitKind === "number" ? (last == null ? n : last + n) : n;
+  }
+  return last;
+}
+
+/** Skor bulan = ROUND(bobot × indeks, 2) / 100 — sama dengan MonthTriplet UI KPI Unit. */
+function unitMonthSkor(k, pct) {
+  if (!Number.isFinite(pct)) return null;
+  const unit = normUnit(k.unit);
+  const indeks = kbY(pct, k.polarity, unit, k.perspective) || 0;
+  const bobot = parseFloat(k.weight) || 0;
+  return Math.round(bobot * indeks * 100) / 100 / 100;
+}
+
+/** Target Des → mundur (sama dengan annualFromMonthlyTarget UI KPI Unit). */
+function unitAnnualFromMonthlyTarget(k) {
+  const mt = parseJson(k && k.monthly_target);
+  for (const m of ["Des", "Nov", "Okt", "Sep", "Ags", "Jul", "Jun", "Mei", "Apr", "Mar", "Feb", "Jan"]) {
+    const raw = mt == null ? null : mt[m];
+    if (raw == null || raw === "") continue;
+    const n = parseFloat(String(raw).replace(",", "."));
+    if (Number.isFinite(n) && n !== 0) return n;
+  }
+  return null;
+}
+
+/** Target Tahun — sama dengan resolveTargetTahunNum UI: field target,
+ *  kecuali currency/number yang targetnya tampak seperti %/bobot → pakai Σ/des monthly. */
+function unitTargetTahunNum(kpi) {
+  const raw = kpi && kpi.target;
+  const e = raw == null || raw === "" ? NaN : Number(String(raw).replace(",", "."));
+  const kind = normUnit(kpi && kpi.unit);
+  const fromMt = unitAnnualFromMonthlyTarget(kpi);
+  if ((kind === "currency" || kind === "number") && fromMt != null) {
+    const absMt = Math.abs(fromMt);
+    if (!Number.isFinite(e)) return fromMt;
+    const w = parseFloat(kpi.weight);
+    if (Number.isFinite(w) && Math.abs(e - w) < 1e-9 && absMt >= 1000) return fromMt;
+    if (absMt >= 1000 && Math.abs(e) < absMt / 50) return fromMt;
+  }
+  if (!Number.isFinite(e)) return null;
+  return e;
 }
 
 export function bobotLabel(v) {
@@ -446,9 +503,10 @@ const INDEKS_BADGE = {
   5: { fill: [37, 99, 235], text: [255, 255, 255] },
 };
 
-// Draws one landscape page (or more if the KPI list overflows) per pegawai,
-// laid out like the KPI Individu monthly table.
-export function buildPdf(JsPDF, reports, year, paper = "a4") {
+// Draws one landscape page (or more if the KPI list overflows) per pegawai/unit,
+// laid out like the monthly scorecard table (KPI Individu / KPI Unit).
+export function buildPdf(JsPDF, reports, year, paper = "a4", opts = {}) {
+  const kind = opts.kind === "unit" ? "unit" : "individu";
   const doc = new JsPDF({ orientation: "landscape", unit: "mm", format: paper, compress: true });
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
@@ -457,7 +515,8 @@ export function buildPdf(JsPDF, reports, year, paper = "a4") {
   const base = 5 * scale;
   const fixed = [5, 17, 38, 8, 12].map((v) => v * scale);
   const tail = [10, 7, 13].map((v) => v * scale);
-  const monthW = (W - M * 2 - fixed.reduce((a, b) => a + b, 0) - tail.reduce((a, b) => a + b, 0)) / 36;
+  const perMonth = kind === "unit" ? 4 : 3;
+  const monthW = (W - M * 2 - fixed.reduce((a, b) => a + b, 0) - tail.reduce((a, b) => a + b, 0)) / (12 * perMonth);
   const lineH = 2.1 * scale;
   const headH1 = 4.5 * scale, headH2 = 4 * scale;
 
@@ -500,11 +559,17 @@ export function buildPdf(JsPDF, reports, year, paper = "a4") {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10 * scale);
     setText(RGB.text);
-    doc.text(`KPI Individu Tahun ${year}${cont ? " (lanjutan)" : ""}`, M, y + 4);
+    doc.text(kind === "unit" ? `KPI UNIT — ${String((r.pegawai && (r.pegawai.kantor || r.pegawai.unit_name)) || "").toUpperCase()} TAHUN ${year}${cont ? " (lanjutan)" : ""}` : `KPI Individu Tahun ${year}${cont ? " (lanjutan)" : ""}`, M, y + 4);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7 * scale);
     setText(RGB.muted);
-    doc.text(`${p.name || "-"}  ·  NPP ${p.npp || "-"}  ·  ${p.jabatan || "-"}  ·  ${p.unit_name || "-"}`, M, y + 8 * scale);
+    doc.text(
+      kind === "unit"
+        ? `${p.unit_name || "-"}  ·  ${p.tipe ? `${p.tipe}  ·  ` : ""}${p.jabatan ? `Pemimpin: ${p.name || "-"} (${p.jabatan})` : p.name || ""}  ·  Skor Akhir: ${r.totals && r.totals.totalSkor != null ? Number(r.totals.totalSkor).toFixed(2) : "-"}  ·  Status: ${(r.totals && (r.totals.kategori || r.totals.status)) || "-"}`
+        : `${p.name || "-"}  ·  NPP ${p.npp || "-"}  ·  ${p.jabatan || "-"}  ·  ${p.unit_name || "-"}`,
+      M,
+      y + 8 * scale
+    );
     y += 11 * scale;
     let x = M;
     const labels = ["No", "Perspektif", "KPI", "Bobot (%)", `Target Tahun ${year}`];
@@ -513,11 +578,12 @@ export function buildPdf(JsPDF, reports, year, paper = "a4") {
       x += w;
     });
     MONTH_HEAD.forEach((m) => {
-      cell(x, y, monthW * 3, headH1, m, { fill: RGB.head, bold: true, leftStrong: true });
+      cell(x, y, monthW * perMonth, headH1, m, { fill: RGB.head, bold: true, leftStrong: true });
       cell(x, y + headH1, monthW, headH2, "Realisasi", { fill: RGB.real, bold: true, size: base * 0.75, leftStrong: true });
       cell(x + monthW, y + headH1, monthW, headH2, "Target", { fill: RGB.tgt, bold: true, size: base * 0.75 });
       cell(x + monthW * 2, y + headH1, monthW, headH2, "Pencapaian", { fill: RGB.pct, bold: true, size: base * 0.75 });
-      x += monthW * 3;
+      if (kind === "unit") cell(x + monthW * 3, y + headH1, monthW, headH2, "Skor", { fill: [237, 233, 254], bold: true, size: base * 0.75 });
+      x += monthW * perMonth;
     });
     ["YTD (%)", "Skor", "Status"].forEach((t, i) => {
       cell(x, y, tail[i], headH1 + headH2, t, { fill: RGB.head, bold: true, leftStrong: i === 0 });
@@ -570,7 +636,8 @@ export function buildPdf(JsPDF, reports, year, paper = "a4") {
           size: base * 0.85,
           color: p != null && p >= 100 ? RGB.green : p != null && p > 0 && p < 80 ? RGB.amber : RGB.text,
         });
-        x += monthW * 3;
+        if (kind === "unit") cell(x + monthW * 3, y, monthW, h, m.skor != null ? m.skor.toFixed(2) : "—", { size: base * 0.85, color: [76, 29, 149] });
+        x += monthW * perMonth;
       });
       const ic = INDEKS_CELL[row.indeks];
       cell(x, y, tail[0], h, row.scored ? fmtPct(row.ytd) : "—", { bold: true, leftStrong: true, fill: ic && ic.fill, color: ic ? ic.text : RGB.muted });
@@ -606,8 +673,8 @@ export function buildPdf(JsPDF, reports, year, paper = "a4") {
     const okBobot = Math.abs((r.totals.totalBobot || 0) - 100) <= 0.1;
     cell(x, y, fixed[3], th, r.totals.totalBobot, { fill: okBobot ? [236, 253, 245] : [254, 242, 242], bold: true, color: okBobot ? RGB.green : [220, 38, 38] });
     x += fixed[3];
-    cell(x, y, fixed[4] + monthW * 36, th, "", { fill: RGB.head });
-    x += fixed[4] + monthW * 36;
+    cell(x, y, fixed[4] + monthW * 12 * perMonth, th, "", { fill: RGB.head });
+    x += fixed[4] + monthW * 12 * perMonth;
     const tc = INDEKS_CELL[r.totals.indeks];
     cell(x, y, tail[0], th, r.totals.avgYtd > 0 ? fmtPct(r.totals.avgYtd) : "—", { bold: true, leftStrong: true, fill: tc ? tc.fill : RGB.head, color: tc ? tc.text : RGB.muted });
     x += tail[0];
@@ -626,7 +693,7 @@ export function buildPdf(JsPDF, reports, year, paper = "a4") {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(6 * scale);
     setText(RGB.muted);
-    doc.text(`Dicetak ${new Date().toLocaleString("id-ID")}  ·  Halaman pegawai ${ri + 1} dari ${reports.length}`, M, H - M + 2);
+    doc.text(`Dicetak ${new Date().toLocaleString("id-ID")}  ·  Halaman ${kind === "unit" ? "unit" : "pegawai"} ${ri + 1} dari ${reports.length}`, M, H - M + 2);
   });
   return doc;
 }
@@ -752,6 +819,218 @@ function buildRankingSheet(XU, rankingRows, { periodeHead, nameCol, sheetName })
     }
   });
   return { ws, sheetName };
+}
+
+/**
+ * Satu baris scorecard per KPI unit — nilai identik dengan tabel detail UI KPI Unit:
+ * realisasi/target per bulan mentah, pencapaian (hanya bulan ditutup), skor bulan,
+ * Target Tahun (resolveTargetTahunNum), YTD, Skor, Status indeks 1–5.
+ */
+export function buildUnitScorecardRows(rows) {
+  const sorted = (rows || []).slice().sort(persSort);
+  let totalBobot = 0;
+  const out = sorted.map((k0, i) => {
+    const k = { ...k0, monthly_data: parseJson(k0.monthly_data), monthly_target: parseJson(k0.monthly_target) };
+    const unit = normUnit(k.unit);
+    const { pencapaian, hasil, scored, indeks } = scoreKpi(k, unit);
+    const w = parseFloat(k.weight) || 0;
+    totalBobot += w;
+    const md = parseJson(k.monthly_data);
+    const mt = parseJson(k.monthly_target);
+    const annRaw = parseFloat(String(k.target ?? "").replace(",", "."));
+    const targetTahun = unitTargetTahunNum(k);
+    const months = MONTHS.map((m) => {
+      const closed = kbMonthClosed(m);
+      const rawR = md == null ? null : md[m];
+      const r = rawR == null || rawR === "" ? null : parseFloat(String(rawR).replace(",", "."));
+      const hasR = Number.isFinite(r);
+      const rawT = mt == null ? null : mt[m];
+      const tDisp = rawT == null || rawT === "" ? null : parseFloat(String(rawT).replace(",", "."));
+      // Perhitungan pencapaian: fallback target tahunan → 0 (sama dengan monthPctOrZero UI)
+      const tCalc = Number.isFinite(tDisp) ? tDisp : Number.isFinite(annRaw) ? annRaw : 0;
+      let pct = null;
+      if (closed && hasR) {
+        const p = polarityPct(r, tCalc, k.polarity);
+        pct = Number.isFinite(p) ? Math.round(p * 100) / 100 : null;
+      }
+      const skor = closed && pct != null ? unitMonthSkor(k, pct) : null;
+      return {
+        realisasi: hasR ? r : 0,
+        target: Number.isFinite(tDisp) ? tDisp : 0,
+        pencapaian: pct,
+        skor,
+        closed,
+      };
+    });
+    const info = skorInfo(indeks);
+    const name = String(k.name || "").trim();
+    return {
+      no: i + 1,
+      perspectiveKey: normPers(k.perspective) || String(k.perspective || "").trim(),
+      perspective: persLabel(k.perspective),
+      name: name.startsWith("-") ? name.slice(1).trim() : name,
+      unit: k.unit,
+      unitKind: unit,
+      weight: Number.isFinite(Number(k.weight)) ? Number(bobotLabel(k.weight)) : null,
+      target: targetTahun != null ? targetTahun : 0,
+      months,
+      scored,
+      ytd: scored ? pencapaian : null,
+      skor: scored ? hasil : null,
+      indeks: scored && info.indeks > 0 ? info.indeks : 0,
+      status: scored && info.indeks > 0 ? info.predikat : "",
+    };
+  });
+  return { rows: out, totalBobot: round(totalBobot, 2) };
+}
+
+/** Report scorecard lengkap satu unit (Excel + PDF) dari baris KPI unit. */
+export function buildUnitReport(unitName, rows, meta = {}) {
+  const parsed = (rows || []).map((k) => ({ ...k, monthly_data: parseJson(k.monthly_data), monthly_target: parseJson(k.monthly_target) }));
+  const st = statsKpis(parsed);
+  const skorAkhir = st.scoredCount > 0 ? Number(st.skorAkhir) || 0 : 0;
+  const nilai = skorAkhir > 0 ? kbNilaiAkhir(skorAkhir) : { kategori: "-" };
+  const { rows: body, totalBobot } = buildUnitScorecardRows(parsed);
+  const indeksAkhir = skorAkhir > 0 ? (skorAkhir < 1.5 ? 1 : skorAkhir < 2.5 ? 2 : skorAkhir < 3.5 ? 3 : skorAkhir < 4.5 ? 4 : 5) : 0;
+  return {
+    pegawai: {
+      unit_name: unitName,
+      kantor: meta.kantor || unitName,
+      tipe: meta.tipe || "",
+      jabatan: meta.jabatan || "",
+      name: meta.leader || meta.name || "",
+    },
+    rows: body,
+    totals: {
+      totalBobot,
+      totalSkor: round(skorAkhir, 2),
+      avgYtd: st.pencapaianTotal || 0,
+      indeks: indeksAkhir,
+      kategori: skorAkhir > 0 ? nilai.kategori : "-",
+      status: skorAkhir > 0 ? nilai.kategori : "",
+      scoredCount: st.scoredCount || 0,
+      kpiTotal: (rows || []).length,
+    },
+  };
+}
+
+/**
+ * Tambahkan sheet scorecard detail per unit ke workbook ranking.
+ * Layout sama dengan UI: Perspektif | KPI | Satuan | Bobot | Target Tahun |
+ * 12 × (Realisasi, Target, Pencapaian %, Skor) | YTD | Skor | Status.
+ */
+export function appendUnitScorecardSheets(XU, wb, ce, opts = {}) {
+  const monthLabel = opts.monthLabel || nilaiPeriodeMonthLabel();
+  const year = opts.year || new Date().getFullYear();
+  const used = new Set(wb.SheetNames.map((n) => String(n).toLowerCase()));
+  const NC = 56; // 5 tetap + 48 bulan + 3 ekor
+  const XS_SUB4 = ["DBEAFE", "E0F2FE", "D1FAE5", "EDE9FE"];
+  Object.entries(ce || {}).forEach(([unitName, rows]) => {
+    if (!Array.isArray(rows) || !rows.length) return;
+    const rep = buildUnitReport(unitName, rows, opts.metaFor ? opts.metaFor(unitName, rows) : {});
+    const st = rep.totals;
+    const head = [
+      [`KPI UNIT — ${String(unitName).toUpperCase()} TAHUN ${year}`],
+      ["Sumber", "Scorecard KPI Unit (sama dengan tampilan halaman KPI Unit)"],
+      ["Nilai periode", monthLabel],
+      ["Skor Akhir", st.totalSkor, "Status", st.kategori || "-", "KPI berdata", `${st.scoredCount || 0}/${st.kpiTotal || rows.length}`],
+      ["Bobot total (%)", st.totalBobot],
+      [`Diekspor: ${new Date().toLocaleString("id-ID")}`],
+    ];
+    const h0 = head.length + 1;
+    const top = ["Perspektif", "KPI", "Satuan", "Bobot (%)", `Target Tahun ${year}`];
+    const sub = ["", "", "", "", ""];
+    MONTHS.forEach((m) => {
+      top.push(m, "", "", "");
+      sub.push("Realisasi", "Target", "Pencapaian (%)", "Skor");
+    });
+    top.push("YTD (%)", "Skor", "Status");
+    sub.push("", "", "");
+    const body = rep.rows.map((row) => {
+      const line = [row.perspective, row.name, unitLabel(row.unit), row.weight != null ? Number(row.weight) : null, row.target];
+      row.months.forEach((m) => line.push(m.realisasi, m.target, m.pencapaian != null ? round(m.pencapaian, 2) : null, m.skor != null ? round(m.skor, 2) : null));
+      line.push(row.ytd != null ? round(row.ytd, 2) : null, row.skor != null ? round(row.skor, 2) : null, row.status || "—");
+      return line;
+    });
+    const total = ["TOTAL", "", "", st.totalBobot, null];
+    MONTHS.forEach(() => total.push(null, null, null, null));
+    total.push(st.avgYtd > 0 ? round(st.avgYtd, 1) : null, st.totalSkor, st.kategori || "");
+
+    const ws = XU.aoa_to_sheet([...head, [], top, sub, ...body, total]);
+    const merges = [];
+    for (let c = 0; c < 5; c++) merges.push({ s: { r: h0, c }, e: { r: h0 + 1, c } });
+    MONTHS.forEach((_, i) => merges.push({ s: { r: h0, c: 5 + i * 4 }, e: { r: h0, c: 8 + i * 4 } }));
+    for (let c = 53; c < 56; c++) merges.push({ s: { r: h0, c }, e: { r: h0 + 1, c } });
+    let start = 0;
+    rep.rows.forEach((row, i) => {
+      const next = rep.rows[i + 1];
+      if (!next || next.perspectiveKey !== row.perspectiveKey) {
+        if (i > start) merges.push({ s: { r: h0 + 2 + start, c: 0 }, e: { r: h0 + 2 + i, c: 0 } });
+        start = i + 1;
+      }
+    });
+    const totalRow = h0 + 2 + rep.rows.length;
+    merges.push({ s: { r: totalRow, c: 0 }, e: { r: totalRow, c: 2 } });
+    ws["!merges"] = merges;
+    ws["!cols"] = [22, 45, 12, 9, 16, ...MONTHS.flatMap(() => [11, 11, 12, 9]), 9, 8, 14].map((wch) => ({ wch }));
+
+    ws.A1.s = { font: { bold: true, sz: 14 } };
+    for (let i = 1; i < head.length; i++) {
+      const c0 = XU.encode_cell({ r: i, c: 0 });
+      if (ws[c0]) ws[c0].s = { font: { bold: true } };
+    }
+    for (let c = 0; c < NC; c++) {
+      xsCell(XU, ws, h0, c, XS_HEAD);
+      const sub = c >= 5 && c < 53 ? XS_SUB4[(c - 5) % 4] : null;
+      xsCell(XU, ws, h0 + 1, c, sub ? { ...XS_HEAD, fill: { patternType: "solid", fgColor: { rgb: sub } } } : XS_HEAD);
+    }
+    rep.rows.forEach((row, i) => {
+      const y = h0 + 2 + i;
+      const fmt = XS_NUMFMT[row.unitKind] || "General";
+      for (let c = 0; c < NC; c++) {
+        const left = c === 0 || c === 1 || c === 2;
+        const cell = xsCell(XU, ws, y, c, {
+          alignment: { vertical: "center", horizontal: left ? "left" : "center", wrapText: c === 0 || c === 1 },
+        });
+        if (c === 1) cell.s.font = { bold: true };
+        const inMonth = c >= 5 && c < 53;
+        const inMonthNum = inMonth && (c - 5) % 4 < 2;
+        if (c === 4 || inMonthNum) cell.z = fmt;
+        if (inMonth && (c - 5) % 4 === 2) {
+          cell.z = "0.00";
+          const p = row.months[Math.floor((c - 5) / 4)].pencapaian;
+          if (p != null && p >= 100) cell.s.font = { color: { rgb: "047857" } };
+          else if (p != null && p > 0 && p < 80) cell.s.font = { color: { rgb: "B45309" } };
+        }
+        if (inMonth && (c - 5) % 4 === 3) cell.z = "0.00";
+        if (c === 53 || c === 54) cell.z = "0.00";
+        if (c === 53 || c === 55) xsIndeks(cell, row.indeks);
+      }
+    });
+    for (let c = 0; c < NC; c++) {
+      const cell = xsCell(XU, ws, totalRow, c, {
+        font: { bold: true },
+        fill: { patternType: "solid", fgColor: { rgb: "F1F5F9" } },
+        alignment: { vertical: "center", horizontal: c === 0 ? "left" : "center" },
+      });
+      if (c === 3) {
+        const ok = Math.abs((st.totalBobot || 0) - 100) <= 0.1;
+        cell.s.fill = { patternType: "solid", fgColor: { rgb: ok ? "D1FAE5" : "FEE2E2" } };
+      }
+      if (c === 53 || c === 54) cell.z = "0.00";
+      if (c === 53 || c === 55) xsIndeks(cell, st.indeks);
+    }
+    ws["!rows"] = [];
+    ws["!rows"][h0] = { hpt: 20 };
+    ws["!rows"][h0 + 1] = { hpt: 18 };
+
+    const base = String(unitName).replace(/[\[\]:*?\/\\]/g, "").trim().slice(0, 31) || "Unit";
+    let name = base, n2 = 2;
+    while (used.has(name.toLowerCase())) name = `${base.slice(0, 27)} (${n2++})`;
+    used.add(name.toLowerCase());
+    XU.book_append_sheet(wb, ws, name);
+  });
+  return wb;
 }
 
 /**
