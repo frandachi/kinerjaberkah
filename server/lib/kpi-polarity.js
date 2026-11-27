@@ -13,6 +13,8 @@ const DEFAULT_BATAS = {
 const MINIMIZE_A_BATAS = [60, 100, 110, 120];
 const MINIMIZE_B_BATAS = [40, 60, 80, 100];
 const MINIMIZE_C_BATAS = [0.25, 1, 2, 3];
+/** Minimize D (Target 0): skor3 ≤ 10, skor2 ≤ 50 — Actual − Target. */
+const MINIMIZE_D_BATAS = [10, 50, 999, 999];
 function batasOfRow(row) {
   const nums = [row && row.batas2, row && row.batas3, row && row.batas4, row && row.batas5].map(Number);
   if (nums.every((n) => Number.isFinite(n))) return nums;
@@ -29,6 +31,7 @@ const POL_META_FALLBACK = {
   minimize_a: { rumus: 'minimize', skala: 'A', batas: MINIMIZE_A_BATAS },
   minimize_b: { rumus: 'minimize', skala: 'B', batas: MINIMIZE_B_BATAS },
   minimize_c: { rumus: 'stabilize', skala: 'C', batas: MINIMIZE_C_BATAS },
+  minimize_d: { rumus: 'stabilize', skala: 'C', batas: MINIMIZE_D_BATAS },
   faster: { rumus: 'faster', skala: 'B', batas: DEFAULT_BATAS.B },
   range: { rumus: 'range', skala: 'A', batas: DEFAULT_BATAS.A },
   stabilize: { rumus: 'stabilize', skala: 'C', batas: MINIMIZE_C_BATAS },

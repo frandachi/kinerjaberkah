@@ -448,7 +448,11 @@ router.get('/catalog', authenticateToken, async (req, res) => {
   try {
     const search = String(req.query.search || '').trim();
     const perspective = String(req.query.perspective || '').trim();
-    const where = ["COALESCE(unit_type, '') <> 'master'", "COALESCE(pic, '') <> 'from-individu-pemimpin'"];
+    // Katalog Master KPI: sertakan juga KPI divisi hasil sinkron dari pemimpin
+    // (pic='from-individu-pemimpin') — tanpa ini hampir semua KPI divisi hilang
+    // dari daftar master. Baris senama tetap digabung per groupKey (tidak duplikat).
+    // Pengecualian pic hanya untuk agregat bank/unit-summary (hindari double count).
+    const where = ["COALESCE(unit_type, '') <> 'master'"];
     const params = [];
     if (search) {
       where.push('(name LIKE ? OR objective LIKE ?)');

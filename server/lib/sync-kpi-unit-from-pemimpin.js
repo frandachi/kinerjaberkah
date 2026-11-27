@@ -15,6 +15,18 @@ const CANON = {
   'unit keamanan & ketahanan siber': 'Unit Keamanan dan Ketahan Siber',
   'unit keamanan dan ketahanan siber': 'Unit Keamanan dan Ketahan Siber',
   'unit keamanan dan ketahan siber': 'Unit Keamanan dan Ketahan Siber',
+  'cabang pembantu mal pelayanan publik kabupaten simalungun': 'Cabang Pembantu MPP Kabupaten Simalungun',
+  'cabang pembantu mpp simalungun': 'Cabang Pembantu MPP Kabupaten Simalungun',
+  'cabang pembantu mal pelayanan publik kabupaten asahan': 'Cabang Pembantu MPP Kabupaten Asahan',
+  'cabang pembantu mal pelayanan publik kabupaten batubara': 'Cabang Pembantu MPP Kabupaten Batubara',
+  'cabang pembantu mal pelayanan publik kabupaten humbang hasundutan': 'Cabang Pembantu MPP Kabupaten Humbahas',
+  'cabang pembantu mal pelayanan publik humbahas': 'Cabang Pembantu MPP Kabupaten Humbahas',
+  'cabang pembantu mal pelayanan publik kabupaten labuhan batu utara': 'Cabang Pembantu MPP Kabupaten Labuhan Batu Utara',
+  'cabang pembantu mal pelayanan publik tebing tinggi': 'Cabang Pembantu MPP Kota Tebing Tinggi',
+  'cabang pembantu mal pelayanan publik kota tebing tinggi': 'Cabang Pembantu MPP Kota Tebing Tinggi',
+  'cabang pembantu mal pelayanan publik kota medan': 'Cabang Pembantu MPP Kota Medan',
+  'cabang pembantu mal pelayanan publik kota pematang siantar': 'Cabang Pembantu MPP Kota Pematang Siantar',
+  'cabang pembantu mal pelayanan publik pematang siantar': 'Cabang Pembantu MPP Kota Pematang Siantar',
 };
 
 function norm(s) {
@@ -337,11 +349,9 @@ async function syncKpiUnitFromPemimpin(db) {
   try {
     await conn.beginTransaction();
 
-    // Hapus semua salinan sync lama, lalu isi ulang dari Individu kepala
-    // (unit kantor ber-Excel di-skip pada filter heads → tidak diisi ulang)
-    const [del] = await conn.query('DELETE FROM kpis WHERE pic = ?', [PIC]);
-    deleted = del.affectedRows || 0;
-
+    // Hanya ganti KPI Unit milik unit yang sumber Individu-nya ada.
+    // Jangan DELETE global pic=from-individu-pemimpin: jika Individu kosong,
+    // salinan Unit yang sudah tersimpan harus tetap (bukan ikut terhapus).
     let n = 0;
     for (const h of heads) {
       const src = await loadIndividuSrc(conn, h);
@@ -351,10 +361,20 @@ async function syncKpiUnitFromPemimpin(db) {
           unit_name: h.unit_name,
           jabatan: h.jabatan,
           name: h.name,
-          reason: 'tidak ada KPI individu',
+          reason: 'tidak ada KPI individu — KPI Unit yang ada dipertahankan',
         });
         continue;
       }
+
+      const unitNames = new Set([h.unitCanon, h.unit_name].filter(Boolean));
+      for (const [ck, cv] of Object.entries(CANON)) {
+        if (norm(cv) === norm(h.unitCanon)) unitNames.add(cv);
+      }
+      const [delOne] = await conn.query(
+        'DELETE FROM kpis WHERE pic = ? AND unit_name IN (?)',
+        [PIC, [...unitNames]]
+      );
+      deleted += delOne.affectedRows || 0;
 
       const values = src.map((k) => {
         const id = `kpi_unit_${Date.now()}_${n}_${Math.floor(Math.random() * 1e6)}`;

@@ -14,7 +14,7 @@ const PERSPECTIVES = ['financial', 'customer', 'internal_process', 'learning_gro
 const POLARITIES = [
   'maximize', 'minimize', 'faster', 'range', 'stabilize',
   'maximize_a', 'maximize_b', 'maximize_c',
-  'minimize_a', 'minimize_b', 'minimize_c',
+  'minimize_a', 'minimize_b', 'minimize_c', 'minimize_d',
 ];
 
 /** Terima label Excel ("Maximize A") maupun kode DB (maximize_a). */
@@ -26,6 +26,7 @@ function normalizePolarityCode(raw) {
     .replace(/\s+/g, ' ');
   if (!p) return null;
   if (/minimi[sz]e\s*c|stabilize|stabilisasi|stabil/.test(p)) return 'minimize_c';
+  if (/minimi[sz]e\s*d/.test(p)) return 'minimize_d';
   if (/minimi[sz]e\s*b/.test(p)) return 'minimize_b';
   if (/minimi[sz]e\s*a/.test(p) || /^minimi[sz]e$/.test(p)) return 'minimize_a';
   if (/minimi[sz]e/.test(p)) return 'minimize_a';

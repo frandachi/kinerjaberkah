@@ -207,6 +207,7 @@ const KB_RUMUS = [
   { v: "faster", l: "Faster is better — Target waktu/Aktual waktu X 100%" },
   { v: "range", l: "Range — 90%–110% dihitung 100%" },
   { v: "stabilize", l: "Minimize C — Aktual - Target" },
+  { v: "minimize_d", l: "Minimize D — Aktual - Target (Khusus Denda/Regulator, Target 0)" },
 ];
 const KB_SKALA = [
   { v: "A", l: "A — 60 / 100 / 105 / 110 (Maximize A)" },

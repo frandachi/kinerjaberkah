@@ -110,6 +110,7 @@ function unitOf(v) {
 function polarityOf(raw, name, ukuran, perspective) {
   const p = low(raw).replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
   if (p) {
+    if (/minimi[sz]e\s*d/.test(p)) return "minimize_d";
     if (/minimi[sz]e\s*c|stabilize|stabilisasi|stabil/.test(p)) return "minimize_c";
     if (/minimi[sz]e\s*b/.test(p)) return "minimize_b";
     if (/minimi[sz]e\s*a/.test(p) || /^minimi[sz]e$/.test(p) || p === "min") return "minimize_a";
@@ -123,6 +124,8 @@ function polarityOf(raw, name, ukuran, perspective) {
   }
   const n = low(name);
   if (/\bnpl\b|\bnpf\b/.test(n)) return "minimize_c";
+  // KPI denda / kerugian regulator (target 0) → Minimize D (Aktual − Target).
+  if (/denda|kerugian/.test(n) && /regulator|ojk|\bbi\b|dps|fraud|kepatuhan|pelanggaran|operasional|syariah|laporan/.test(n)) return "minimize_d";
   if (/cost of (credit|fund)|\bbopo\b|\bdenda\b|\bckpn\b|\bloses\b|\bloss\b|\btat\b/.test(n)) return "minimize_a";
   if (/\bhari\b/.test(low(ukuran))) return "faster";
   return inferMaximizeScale(ukuran, perspective);
