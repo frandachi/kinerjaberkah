@@ -23,7 +23,7 @@
   // puluhan MB (MonthLine 650KB, dll) di setiap deploy.
   const BASE = "/kinerjaberkah/assets/";
   const CANON = "index-CdyJlLvAQ.js";
-  const VERSION = "20261127a";
+  const VERSION = "20261127b";
   try { localStorage.removeItem("kb_periode_settings"); } catch {}
   const LS_KEY = "kb_index_cache_v";
 
@@ -39,6 +39,7 @@
     BASE + "kpi-summary-Zero03.js",
     BASE + "DeleteConfirmDialog-Manual14.js",
     BASE + "KPIUnitKantor-Pemimpin01.js",
+    BASE + "Scorecard-B7oCx77H.js",
     BASE + "kpi-individu-export-Core01.js",
     BASE + "LaporanAnalisis-Export04.js",
     BASE + "Dashboard-Score01.js",
